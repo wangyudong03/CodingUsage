@@ -1,0 +1,94 @@
+<% // 根据不同平台显示不同的使用指标
+let displayUsed, displayTotal, displayRemain, usageLabel;
+if (card.is_cursor && card.api_limit > 0) {
+  // Cursor: 只显示 API 使用数据
+  displayUsed = card.api_spend || 0;
+  displayTotal = card.api_limit || 0;
+  displayRemain = displayTotal - displayUsed;
+  usageLabel = 'API';
+} else if (card.is_trae) {
+  // Trae: 显示次数，剩余量通过 total - used 计算
+  displayUsed = card.used_usage || 0;
+  displayTotal = card.total_usage || 0;
+  displayRemain = displayTotal - displayUsed;
+  usageLabel = '';
+} else {
+  // 默认情况
+  displayUsed = 0;
+  displayTotal = 0;
+  displayRemain = 0;
+  usageLabel = '';
+}
+const pct = displayTotal > 0 ? Math.min(100, Math.round((displayUsed / displayTotal) * 100)) : 0;
+const progressClass = pct >= 90 ? 'danger' : (pct >= 70 ? 'warning' : '');
+
+// 构建悬停提示
+let tooltipText = '';
+if (card.is_cursor && card.api_limit > 0) {
+  tooltipText = `API: ${helpers.dollars(card.api_spend)}/${helpers.dollars(card.api_limit)}`;
+  if (card.auto_limit > 0) {
+    tooltipText += ` | Auto: ${helpers.dollars(card.auto_spend)}/${helpers.dollars(card.auto_limit)}`;
+  }
+} else if (card.is_trae) {
+  tooltipText = `Used: ${card.used_usage || 0} | Total: ${card.total_usage || 0} | Remain: ${displayRemain}`;
+}
+tooltipText += card.app_name ? ' | App: ' + card.app_name : '';
+%>
+
+  <div class="card" title="<%= tooltipText %>">
+    <div class="card-top">
+      <div class="status-dot">
+        <span class="dot <%= card.online ? 'online' : '' %>"></span>
+        <span>
+          <%= card.online ? 'Online' : 'Offline' %>
+        </span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <% if (card.app_logo) { %>
+          <img src="<%= card.app_logo %>" alt="<%= card.app_name %>"
+            style="width: 16px; height: 16px; border-radius: 3px;" />
+          <% } %>
+            <span
+              class="tag <%= card.membership_type === 'pro' ? 'pro' : (card.membership_type === 'business' ? 'business' : '') %>">
+              <%= card.membership_type || 'Free' %>
+            </span>
+      </div>
+    </div>
+    <div class="card-main">
+      <span class="email">
+        <%= card.email || card.api_key_short %>
+      </span>
+    </div>
+    <div class="progress <%= progressClass %>">
+      <div class="bar" style="--w: <%= pct %>%"></div>
+    </div>
+    <div class="meta">
+      <div>
+        <% if (card.expire_time) { %>
+          Exp: <%= helpers.fmtExpire(card.expire_time) %>
+            <% } %>
+      </div>
+      <div>
+        Remain: <%= card.is_cursor && card.api_limit> 0 ? helpers.dollars(displayRemain) :
+          helpers.formatUsage(displayRemain, card.is_trae) %>
+      </div>
+    </div>
+    <div class="meta" style="margin-top: 4px; font-size: 11px; color: #8c959f;">
+      <div>
+        <svg class="octicon" viewBox="0 0 16 16" width="12" height="12"
+          style="vertical-align: -2px; margin-right: 2px;">
+          <path
+            d="M1.5 8a6.5 6.5 0 1113 0 6.5 6.5 0 01-13 0zM8 0a8 8 0 100 16A8 8 0 008 0zm.5 4.75a.75.75 0 00-1.5 0v3.5a.75.75 0 00.37.65l2.5 1.5a.75.75 0 00.76-1.3L8.5 7.69V4.75z">
+          </path>
+        </svg>
+        Last: <%= helpers.fmtActivity(card.last_activity) %>
+      </div>
+      <div>
+        <% if (card.is_cursor && card.api_limit > 0) { %>
+          <%= helpers.dollars(displayUsed) %>
+        <% } else if (card.is_trae) { %>
+          <%= card.used_usage || 0 %>
+        <% } %>
+      </div>
+    </div>
+  </div>

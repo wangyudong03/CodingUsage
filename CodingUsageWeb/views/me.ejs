@@ -2,253 +2,67 @@
 <html lang="zh-CN">
 
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>My Stats - Coding Usage</title>
-  <link rel="icon" type="image/png" href="<%= basePath %>/static/web_logo.png" />
-  <link rel="shortcut icon" href="<%= basePath %>/static/web_logo.png" />
-  <link rel="apple-touch-icon" href="<%= basePath %>/static/web_logo.png" />
-  <link rel="stylesheet" href="<%= basePath %>/static/style.css" />
-  <style>
-    .key-section {
-      background: #ffffff;
-      border: 1px solid #d0d7de;
-      border-radius: 6px;
-      margin-bottom: 16px;
-      overflow: hidden;
-    }
-
-    .key-section:hover {
-      border-color: #0969da;
-    }
-
-    .key-card {
-      padding: 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid #eaeef2;
-    }
-
-    .key-stats {
-      padding: 16px;
-      background: #f6f8fa;
-    }
-
-    .key-info {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .key-value {
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      font-size: 14px;
-      color: #24292f;
-    }
-
-    .key-meta {
-      font-size: 12px;
-      color: #57606a;
-    }
-
-    .key-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .toggle-public {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      border: 1px solid #d0d7de;
-      background: #f6f8fa;
-      transition: all 0.15s ease;
-    }
-
-    .toggle-public:hover {
-      background: #f3f4f6;
-    }
-
-    .toggle-public.public {
-      background: #dafbe1;
-      border-color: #4ac26b;
-      color: #1a7f37;
-    }
-
-    .unbind-btn {
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 13px;
-      color: #cf222e;
-      border: 1px solid #d0d7de;
-      background: #ffffff;
-      cursor: pointer;
-    }
-
-    .unbind-btn:hover {
-      background: #ffebe9;
-      border-color: #cf222e;
-    }
-
-    /* Bind Key Modal */
-    .modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-
-    .modal-overlay.show {
-      display: flex;
-    }
-
-    .modal {
-      background: #ffffff;
-      border-radius: 12px;
-      padding: 24px;
-      width: 100%;
-      max-width: 420px;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
-    }
-
-    .modal-title {
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      color: #24292f;
-    }
-
-    .modal-desc {
-      font-size: 14px;
-      color: #57606a;
-      margin-bottom: 16px;
-    }
-
-    .modal-input {
-      width: 100%;
-      padding: 10px 12px;
-      font-size: 14px;
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      border: 1px solid #d0d7de;
-      border-radius: 6px;
-      margin-bottom: 16px;
-    }
-
-    .modal-input:focus {
-      outline: none;
-      border-color: #0969da;
-      box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.12);
-    }
-
-    .modal-actions {
-      display: flex;
-      gap: 8px;
-      justify-content: flex-end;
-    }
-
-    .modal-error {
-      color: #cf222e;
-      font-size: 13px;
-      margin-bottom: 12px;
-      display: none;
-    }
-
-    .modal-error.show {
-      display: block;
-    }
-
-    .no-keys-message {
-      text-align: center;
-      padding: 48px 24px;
-      background: #f6f8fa;
-      border-radius: 6px;
-      border: 1px dashed #d0d7de;
-    }
-
-    .no-keys-message h3 {
-      margin-bottom: 12px;
-      color: #24292f;
-    }
-
-    .no-keys-message p {
-      color: #57606a;
-      margin-bottom: 16px;
-    }
-  </style>
+  <%- include('partials/head', { pageTitle: 'My Stats - Coding Usage' }) %>
 </head>
 
 <body>
   <div class="container">
-    <nav class="nav">
-      <div class="left">
-        <a href="<%= basePath %>/" class="brand">
-          <img src="<%= basePath %>/static/web_logo.png" alt="Logo" style="width: 24px; height: 24px;" />
-          Coding Usage
-        </a>
+    <%- include('partials/nav', { showMyStatsLink: true }) %>
+
+      <div class="page-header">
+        <h1 class="page-title">My Stats</h1>
+        <p class="page-desc">View usage statistics for your bound API Keys</p>
       </div>
-      <div class="right">
-        <a href="<%= basePath %>/">Plaza</a>
-        <button type="button" class="btn-primary" id="bindKeyBtn">
-          <svg class="octicon" viewBox="0 0 16 16" width="16" height="16">
-            <path
-              d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z">
-            </path>
+
+      <% if (!hasBoundKeys) { %>
+        <div class="no-keys-message">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#57606a" stroke-width="1.5"
+            style="margin-bottom: 16px;">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
           </svg>
-          Add API Key
-        </button>
-      </div>
-    </nav>
+          <h3>No API Keys Bound</h3>
+          <p>Bind your Client API Key to view your usage statistics. You can find your API Key in Cursor Settings →
+            Extensions → Cursor Usage.</p>
+          <button type="button" class="btn-primary" id="bindKeyBtnEmpty">
+            <svg class="octicon" viewBox="0 0 16 16" width="16" height="16">
+              <path
+                d="M6.5 5.5a4 4 0 0 1 7.43 2.11.75.75 0 0 0 1.49-.16 5.5 5.5 0 1 0-10.4 3.38l-.08.08-1.63 1.63A1.75 1.75 0 0 0 3 13.75V15h1.25a1.75 1.75 0 0 0 1.24-.51l.52-.52h1.5c.69 0 1.25-.56 1.25-1.25v-.25h.75c.69 0 1.25-.56 1.25-1.25V10h1.01a.75.75 0 0 0 .53-.22l.09-.09.08-.04A4 4 0 0 0 6.5 5.5zM9 5.5a1 1 0 1 1 2 0 1 1 0 0 1-2 0z">
+              </path>
+            </svg>
+            Bind API Key
+          </button>
+        </div>
+        <% } else { %>
+          <!-- Bound API Keys with Statistics -->
+          <div class="section">
+            <h2 style="margin-bottom: 16px;">Bound API Keys (<%= keys.length %>)</h2>
 
-    <div class="page-header">
-      <h1 class="page-title">My Stats</h1>
-      <p class="page-desc">View usage statistics for your bound API Keys</p>
-    </div>
-
-    <% if (!hasBoundKeys) { %>
-      <div class="no-keys-message">
-        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#57606a" stroke-width="1.5"
-          style="margin-bottom: 16px;">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
-        </svg>
-        <h3>No API Keys Bound</h3>
-        <p>Bind your Client API Key to view your usage statistics. You can find your API Key in Cursor Settings →
-          Extensions → Cursor Usage.</p>
-        <button type="button" class="btn-primary" id="bindKeyBtnEmpty">
-          <svg class="octicon" viewBox="0 0 16 16" width="16" height="16">
-            <path
-              d="M6.5 5.5a4 4 0 0 1 7.43 2.11.75.75 0 0 0 1.49-.16 5.5 5.5 0 1 0-10.4 3.38l-.08.08-1.63 1.63A1.75 1.75 0 0 0 3 13.75V15h1.25a1.75 1.75 0 0 0 1.24-.51l.52-.52h1.5c.69 0 1.25-.56 1.25-1.25v-.25h.75c.69 0 1.25-.56 1.25-1.25V10h1.01a.75.75 0 0 0 .53-.22l.09-.09.08-.04A4 4 0 0 0 6.5 5.5zM9 5.5a1 1 0 1 1 2 0 1 1 0 0 1-2 0z">
-            </path>
-          </svg>
-          Bind API Key
-        </button>
-
-      </div>
-      <% } else { %>
-        <% function dollars(cents){ return `$${((cents||0)/100).toFixed(2)}` } %>
-          <% function formatUsage(value, isTrae) { return isTrae ? value : dollars(value); } %>
-            <% function fmtExpire(ts) { if(!ts){return '' ;} const d=new Date(Number(ts)); const
-              mm=String(d.getMonth()+1).padStart(2,'0'); const dd=String(d.getDate()).padStart(2,'0'); const
-              hh=String(d.getHours()).padStart(2,'0'); const mi=String(d.getMinutes()).padStart(2,'0'); return
-              `${mm}-${dd} ${hh}:${mi}`; } %>
-
-              <!-- Bound API Keys with Statistics -->
-              <div class="section">
-                <h2 style="margin-bottom: 16px;">Bound API Keys (<%= keys.length %>)</h2>
-
-                <% keys.forEach(k=> { %>
+            <% keys.forEach(k=> { %>
+              <% if (k.notFound) { %>
+                <!-- API Key 不存在于数据库中 -->
+                <div class="key-section" style="border-color: #d1242f;">
+                  <div class="key-card">
+                    <div class="key-info">
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <svg viewBox="0 0 16 16" width="20" height="20" fill="#d1242f">
+                          <path
+                            d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" />
+                        </svg>
+                        <span class="key-value" style="color: #d1242f;">
+                          <%= k.api_key_short %>
+                        </span>
+                      </div>
+                      <span class="key-meta" style="color: #d1242f;">
+                        This API Key is not found in the database. It may have been deleted or never synced.
+                      </span>
+                    </div>
+                    <div class="key-actions">
+                      <button type="button" class="unbind-btn" data-key="<%= k.api_key %>">Unbind</button>
+                    </div>
+                  </div>
+                </div>
+                <% } else { %>
                   <div class="key-section">
                     <!-- Key Header -->
                     <div class="key-card">
@@ -266,8 +80,7 @@
                           API Key: <%= k.api_key.substring(0, 8) %>... |
                             <% if (k.app_name) { %>App: <%= k.app_name %> | <% } %>
                                   Created: <%= new Date(k.created_at).toLocaleDateString() %>
-                                    <% if (k.online) { %>
-                                      | <span style="color: #2da44e;">● Online</span>
+                                    <% if (k.online) { %>| <span style="color: #2da44e;">● Online</span>
                                       <% } %>
                         </span>
                       </div>
@@ -287,9 +100,7 @@
                           </svg>
                           <%= k.is_public ? 'Public' : 'Private' %>
                         </button>
-                        <button type="button" class="unbind-btn" data-key="<%= k.api_key %>">
-                          Unbind
-                        </button>
+                        <button type="button" class="unbind-btn" data-key="<%= k.api_key %>">Unbind</button>
                       </div>
                     </div>
 
@@ -309,43 +120,85 @@
                               <div class="usage-row">
                                 <span style="color: #57606a;">Expires</span>
                                 <span>
-                                  <%= fmtExpire(k.usage.expire_time) || 'N/A' %>
+                                  <%= helpers.fmtExpire(k.usage.expire_time) %>
                                 </span>
                               </div>
-                              <div class="usage-row">
-                                <span style="color: #57606a;">Total</span>
-                                <span>
-                                  <%= formatUsage(k.usage.total_usage, k.is_trae) %>
-                                </span>
-                              </div>
-                              <div class="usage-row">
-                                <span style="color: #57606a;">Used</span>
-                                <span>
-                                  <%= formatUsage(k.usage.used_usage, k.is_trae) %>
-                                </span>
-                              </div>
-                              <% if (k.usage.bonus_usage && k.usage.bonus_usage> 0) { %>
+
+                              <% if (k.is_cursor && k.usage.api_limit> 0) { %>
+                                <!-- Cursor: 显示 API 使用进度 -->
                                 <div class="usage-row">
-                                  <span style="color: #57606a;">Bonus</span>
-                                  <span style="color: #f97316;">+<%= formatUsage(k.usage.bonus_usage, k.is_trae) %>
+                                  <span style="color: #57606a;">API Usage</span>
+                                  <span>
+                                    <%= helpers.dollars(k.usage.api_spend) %> / <%= helpers.dollars(k.usage.api_limit)
+                                        %>
                                   </span>
                                 </div>
-                                <% } %>
-                                  <div class="usage-row">
-                                    <span style="color: #57606a;">Remaining</span>
-                                    <span class="strong">
-                                      <%= formatUsage(k.usage.remaining_usage, k.is_trae) %>
-                                    </span>
-                                  </div>
-                                  <% const pct=k.usage.total_usage>0 ? Math.min(100,
-                                    Math.round((k.usage.used_usage/k.usage.total_usage)*100)) : 0; %>
-                                    <% const progressClass=pct>= 90 ? 'danger' : (pct >= 70 ? 'warning' : ''); %>
-                                      <div class="progress <%= progressClass %>">
-                                        <div class="bar" style="--w: <%= pct %>%"></div>
+                                <% const apiPct=k.usage.api_limit> 0 ? Math.min(100, Math.round((k.usage.api_spend /
+                                  k.usage.api_limit) * 100)) : 0; %>
+                                  <% const apiProgressClass=apiPct>= 90 ? 'danger' : (apiPct >= 70 ? 'warning' : ''); %>
+                                    <div class="progress <%= apiProgressClass %>">
+                                      <div class="bar" style="--w: <%= apiPct %>%"></div>
+                                    </div>
+                                    <div style="margin-top: 4px; font-size: 12px; color: #57606a; text-align: right;">
+                                      <%= apiPct %>% API used
+                                    </div>
+
+                                    <% if (k.usage.auto_limit> 0) { %>
+                                      <!-- Cursor: Auto 使用进度 -->
+                                      <div class="auto-usage-section"
+                                        style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed #d0d7de;">
+                                        <div class="usage-row">
+                                          <span style="color: #57606a;">Auto Usage</span>
+                                          <span>
+                                            <%= helpers.dollars(k.usage.auto_spend) %> / <%=
+                                                helpers.dollars(k.usage.auto_limit) %>
+                                          </span>
+                                        </div>
+                                        <% const autoPct=k.usage.auto_limit> 0 ? Math.min(100,
+                                          Math.round((k.usage.auto_spend / k.usage.auto_limit) * 100)) : 0; %>
+                                          <% const autoProgressClass=autoPct>= 90 ? 'danger' : (autoPct >= 70 ?
+                                            'warning' : ''); %>
+                                            <div class="progress <%= autoProgressClass %>">
+                                              <div class="bar" style="--w: <%= autoPct %>%"></div>
+                                            </div>
+                                            <div
+                                              style="margin-top: 4px; font-size: 12px; color: #57606a; text-align: right;">
+                                              <%= autoPct %>% Auto used
+                                            </div>
                                       </div>
-                                      <div style="margin-top: 8px; font-size: 12px; color: #57606a; text-align: right;">
-                                        <%= pct %>% used
-                                      </div>
+                                      <% } %>
+                                        <% } else if (k.is_trae) { %>
+                                          <!-- Trae：显示总体使用量 -->
+                                          <div class="usage-row">
+                                            <span style="color: #57606a;">Total</span>
+                                            <span>
+                                              <%= k.usage.total_usage || 0 %>
+                                            </span>
+                                          </div>
+                                          <div class="usage-row">
+                                            <span style="color: #57606a;">Used</span>
+                                            <span>
+                                              <%= k.usage.used_usage || 0 %>
+                                            </span>
+                                          </div>
+                                          <% const remaining = (k.usage.total_usage || 0) - (k.usage.used_usage || 0); %>
+                                          <div class="usage-row">
+                                            <span style="color: #57606a;">Remaining</span>
+                                            <span class="strong">
+                                              <%= remaining %>
+                                            </span>
+                                          </div>
+                                          <% const pct = k.usage.total_usage > 0 ? Math.min(100,
+                                            Math.round((k.usage.used_usage / k.usage.total_usage) * 100)) : 0; %>
+                                          <% const progressClass = pct >= 90 ? 'danger' : (pct >= 70 ? 'warning' : ''); %>
+                                          <div class="progress <%= progressClass %>">
+                                            <div class="bar" style="--w: <%= pct %>%"></div>
+                                          </div>
+                                          <div
+                                            style="margin-top: 8px; font-size: 12px; color: #57606a; text-align: right;">
+                                            <%= pct %>% used
+                                          </div>
+                                        <% } %>
                             </div>
                             <% } else { %>
                               <div class="usage-card">
@@ -362,8 +215,15 @@
                         </div>
                         <div class="usage-right">
                           <div class="usage-card">
-                            <div style="font-size: 12px; color: #57606a; margin-bottom: 8px;">Usage Trend (30 days)
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                              <div style="font-size: 12px; color: #57606a;" class="trend-title" data-key="<%= k.api_key %>">Usage Trend (30 days)</div>
+                              <div class="granularity-selector" data-key="<%= k.api_key %>">
+                                <button type="button" class="granularity-btn active" data-granularity="day" data-key="<%= k.api_key %>">Day</button>
+                                <button type="button" class="granularity-btn" data-granularity="hour" data-key="<%= k.api_key %>">Hour</button>
+                                <button type="button" class="granularity-btn" data-granularity="minute" data-key="<%= k.api_key %>">Min</button>
+                              </div>
                             </div>
+                            <div class="trend-chart-container" data-key="<%= k.api_key %>" data-is-trae="<%= k.is_trae %>">
                             <% if (k.trend && k.trend.length) { %>
                               <% const W=480, H=160, P=24; const max=k.maxVal || 1; const stepX=(W - P*2) /
                                 (k.trend.length - 1); function y(v){ return H - P - (v/max)*(H - P*2); } %>
@@ -377,21 +237,21 @@
 
                                   <!-- Area fill -->
                                   <path fill="rgba(9, 105, 218, 0.1)" d="
-                          M <%= P %>,<%= H - P %>
-                          <% for(let i=0;i<k.trend.length;i++){ %>
-                            L <%= (P + i*stepX).toFixed(1) %>,<%= y(k.trend[i].value).toFixed(1) %>
-                          <% } %>
-                          L <%= (P + (k.trend.length-1)*stepX).toFixed(1) %>,<%= H - P %>
-                          Z
-                        " />
+                            M <%= P %>,<%= H - P %>
+                            <% for(let i=0;i<k.trend.length;i++){ %>
+                              L <%= (P + i*stepX).toFixed(1) %>,<%= y(k.trend[i].value).toFixed(1) %>
+                            <% } %>
+                            L <%= (P + (k.trend.length-1)*stepX).toFixed(1) %>,<%= H - P %>
+                            Z
+                          " />
 
                                   <!-- Line -->
                                   <polyline fill="none" stroke="#0969da" stroke-width="2" stroke-linecap="round"
                                     stroke-linejoin="round" points="
-                          <% for(let i=0;i<k.trend.length;i++){ %>
-                            <%= (P + i*stepX).toFixed(1) %>,<%= y(k.trend[i].value).toFixed(1) %>
-                          <% } %>
-                        " />
+                            <% for(let i=0;i<k.trend.length;i++){ %>
+                              <%= (P + i*stepX).toFixed(1) %>,<%= y(k.trend[i].value).toFixed(1) %>
+                            <% } %>
+                          " />
 
                                   <!-- Data points -->
                                   <% for(let i=0;i<k.trend.length;i++){ %>
@@ -406,11 +266,6 @@
                                           <%= k.trend[i].label %>
                                         </text>
                                         <% } %>
-
-                                          <!-- Max value label -->
-                                          <text x="<%= W - P %>" y="<%= P - 4 %>" text-anchor="end" font-size="10"
-                                            fill="#24292f" font-weight="500">Max: <%= formatUsage(max, k.is_trae) %>
-                                          </text>
                                 </svg>
                                 <% } else { %>
                                   <div class="empty-state" style="padding: 24px;">
@@ -422,190 +277,27 @@
                                     <p style="margin-top: 8px; font-size: 13px; color: #57606a;">No trend data</p>
                                   </div>
                                   <% } %>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                  <% }) %>
-              </div>
-              <% } %>
+                  <% } %>
+                    <% }) %>
+          </div>
+          <% } %>
   </div>
 
-  <!-- Bind API Key Modal -->
-  <div class="modal-overlay" id="bindModal">
-    <div class="modal">
-      <div class="modal-title">Bind API Key</div>
-      <div class="modal-desc">
-        Enter your Client API Key from the Cursor Usage extension. You can find it in Cursor Settings → Extensions →
-        Cursor Usage → Client API Key, or use the "Copy Client API Key" command.
-      </div>
-      <input type="text" class="modal-input" id="apiKeyInput" placeholder="ck_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-        maxlength="35" />
-      <div class="modal-error" id="bindError"></div>
-      <div class="modal-actions">
-        <button type="button" class="btn" id="cancelBind">Cancel</button>
-        <button type="button" class="btn-primary" id="confirmBind">Bind</button>
-      </div>
-    </div>
-  </div>
+  <%- include('partials/bind-modal') %>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      // ==================== API Key 存储管理 ====================
-      const API_KEYS_STORAGE_KEY = 'boundApiKeys';
-
-      function getBoundApiKeys() {
-        try {
-          const keys = localStorage.getItem(API_KEYS_STORAGE_KEY);
-          return keys ? JSON.parse(keys) : [];
-        } catch {
-          return [];
-        }
-      }
-
-      function saveBoundApiKeys(keys) {
-        localStorage.setItem(API_KEYS_STORAGE_KEY, JSON.stringify(keys));
-        // 同步到 cookie 以便服务端读取
-        document.cookie = `boundApiKeys=${encodeURIComponent(JSON.stringify(keys))};path=/;max-age=${365 * 24 * 60 * 60}`;
-      }
-
-      function addBoundApiKey(apiKey) {
-        const keys = getBoundApiKeys();
-        if (!keys.includes(apiKey)) {
-          keys.push(apiKey);
-          saveBoundApiKeys(keys);
-        }
-      }
-
-      function removeBoundApiKey(apiKey) {
-        const keys = getBoundApiKeys().filter(k => k !== apiKey);
-        saveBoundApiKeys(keys);
-      }
-
-      // 页面加载时同步 localStorage 到 cookie
-      saveBoundApiKeys(getBoundApiKeys());
-
-      // ==================== 绑定 API Key 弹窗 ====================
-      const bindBtns = document.querySelectorAll('#bindKeyBtn, #bindKeyBtnEmpty');
-      const bindModal = document.getElementById('bindModal');
-      const apiKeyInput = document.getElementById('apiKeyInput');
-      const cancelBind = document.getElementById('cancelBind');
-      const confirmBind = document.getElementById('confirmBind');
-      const bindError = document.getElementById('bindError');
-
-      bindBtns.forEach(btn => {
-        if (btn) {
-          btn.addEventListener('click', () => {
-            bindModal.classList.add('show');
-            apiKeyInput.focus();
-          });
-        }
-      });
-
-      if (cancelBind) {
-        cancelBind.addEventListener('click', () => {
-          bindModal.classList.remove('show');
-          apiKeyInput.value = '';
-          bindError.classList.remove('show');
-        });
-      }
-
-      if (bindModal) {
-        bindModal.addEventListener('click', (e) => {
-          if (e.target === bindModal) {
-            bindModal.classList.remove('show');
-            apiKeyInput.value = '';
-            bindError.classList.remove('show');
-          }
-        });
-      }
-
-      if (confirmBind) {
-        confirmBind.addEventListener('click', async () => {
-          const apiKey = apiKeyInput.value.trim();
-          if (!apiKey.startsWith('ck_') || apiKey.length !== 35) {
-            bindError.textContent = 'API Key must start with "ck_" and be 35 characters';
-            bindError.classList.add('show');
-            return;
-          }
-
-          // 检查是否已绑定
-          if (getBoundApiKeys().includes(apiKey)) {
-            bindError.textContent = 'This API Key is already bound';
-            bindError.classList.add('show');
-            return;
-          }
-
-          try {
-            // 验证 API Key 是否存在
-            const res = await fetch('<%= basePath %>/validate-key', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ api_key: apiKey })
-            });
-
-            const data = await res.json();
-
-            if (res.ok) {
-              // 保存到本地存储
-              addBoundApiKey(apiKey);
-              window.location.reload();
-            } else {
-              bindError.textContent = data.error || 'Failed to validate API Key';
-              bindError.classList.add('show');
-            }
-          } catch (err) {
-            bindError.textContent = 'Network error. Please try again.';
-            bindError.classList.add('show');
-          }
-        });
-      }
-
-      if (apiKeyInput) {
-        apiKeyInput.addEventListener('keypress', (e) => {
-          if (e.key === 'Enter') {
-            confirmBind.click();
-          }
-        });
-      }
-
-      // ==================== 切换公开状态 ====================
-      document.querySelectorAll('.toggle-public').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const apiKey = btn.getAttribute('data-key');
-          try {
-            const res = await fetch('<%= basePath %>/toggle-public', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                api_key: apiKey,
-                bound_keys: getBoundApiKeys()
-              })
-            });
-            if (res.ok) {
-              window.location.reload();
-            }
-          } catch (err) {
-            console.error('Failed to toggle public status', err);
-          }
-        });
-      });
-
-      // ==================== 解绑 ====================
-      document.querySelectorAll('.unbind-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const apiKey = btn.getAttribute('data-key');
-          if (!confirm('Are you sure you want to unbind this API Key?')) return;
-
-          // 从本地存储移除
-          removeBoundApiKey(apiKey);
-          window.location.reload();
-        });
-      });
-
-    });
-  </script>
+    <script>
+      // 设置全局 BASE_PATH 变量供 JS 模块使用
+      window.BASE_PATH = '<%= basePath %>';
+    </script>
+    <script src="<%= basePath %>/static/api-manager.js"></script>
+    <script src="<%= basePath %>/static/bind-modal.js"></script>
+    <script src="<%= basePath %>/static/me.js"></script>
 </body>
 
 </html>

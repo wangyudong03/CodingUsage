@@ -8,8 +8,7 @@
     "storage",
     "webRequest",
     "tabs",
-    "cookies",
-    "clipboardWrite"
+    "cookies"
   ],
   "host_permissions": [
     "*://*.trae.ai/*",
@@ -30,13 +29,21 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.trae.ai/*"],
-      "js": ["content.js"],
+      "matches": [
+        "*://*.trae.ai/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_end"
     },
     {
-      "matches": ["*://*.cursor.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "*://*.cursor.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_end"
     }
   ],
@@ -47,8 +54,15 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icon16.png", "icon48.png", "icon128.png"],
-      "matches": ["*://*.trae.ai/*", "*://*.cursor.com/*"]
+      "resources": [
+        "icon16.png",
+        "icon48.png",
+        "icon128.png"
+      ],
+      "matches": [
+        "*://*.trae.ai/*",
+        "*://*.cursor.com/*"
+      ]
     }
   ],
   "minimum_chrome_version": "88"

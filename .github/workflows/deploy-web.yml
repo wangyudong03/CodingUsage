@@ -1,0 +1,148 @@
+name: Deploy CodingUsageWeb
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'CodingUsageWeb/**'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy files to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.WEB_HOST }}
+          username: ${{ secrets.WEB_USERNAME }}
+          key: ${{ secrets.WEB_SSH_KEY }}
+          source: "CodingUsageWeb/"
+          target: "/home/${{ secrets.WEB_USERNAME }}/"
+          strip_components: 0
+          overwrite: true
+          rm: false
+
+      - name: Install dependencies and Restart Service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.WEB_HOST }}
+          username: ${{ secrets.WEB_USERNAME }}
+          key: ${{ secrets.WEB_SSH_KEY }}
+          command_timeout: 30m
+          script: |
+            # 设置部署目录
+            DEPLOY_DIR="/home/${{ secrets.WEB_USERNAME }}/CodingUsageWeb"
+            
+            echo "======================================"
+            echo "🚀 开始部署 CodingUsageWeb"
+            echo "======================================"
+            echo "部署目录: $DEPLOY_DIR"
+            echo "部署时间: $(date '+%Y-%m-%d %H:%M:%S')"
+            echo ""
+            
+            # 进入部署目录
+            cd $DEPLOY_DIR
+            
+            # 确保目录权限正确
+            chmod -R 755 $DEPLOY_DIR
+            
+            # 安装依赖
+            echo "📦 安装 Node.js 依赖..."
+            echo "--------------------------------------"
+            npm ci --production --legacy-peer-deps
+            
+            if [ $? -ne 0 ]; then
+              echo ""
+              echo "❌ 依赖安装失败"
+              exit 1
+            fi
+            
+            echo ""
+            echo "✅ 依赖安装成功"
+            echo ""
+            
+            # 使用 PM2 重启服务
+            echo "🔄 使用 PM2 重启服务..."
+            echo "--------------------------------------"
+            
+            # 检查 PM2 是否可用
+            if ! command -v pm2 &> /dev/null; then
+              echo "❌ PM2 未安装或不在 PATH 中"
+              echo "请运行: npm install -g pm2"
+              exit 1
+            fi
+            
+            # 检查服务是否已经在 PM2 中
+            if pm2 describe coding-usage-web > /dev/null 2>&1; then
+              echo "重启现有服务..."
+              pm2 restart coding-usage-web --update-env
+              
+              # 等待服务启动
+              sleep 3
+              
+              # 检查服务状态
+              if pm2 describe coding-usage-web | grep -q "online"; then
+                echo ""
+                echo "✅ 服务重启成功"
+              else
+                echo ""
+                echo "⚠️  服务可能未正常启动"
+                pm2 logs coding-usage-web --lines 20 --nostream
+                exit 1
+              fi
+            else
+              echo "首次启动，创建新服务..."
+              pm2 start server.js --name coding-usage-web
+              
+              # 等待服务启动
+              sleep 3
+              
+              # 检查服务状态
+              if pm2 describe coding-usage-web | grep -q "online"; then
+                echo ""
+                echo "✅ 服务启动成功"
+              else
+                echo ""
+                echo "❌ 服务启动失败"
+                pm2 logs coding-usage-web --lines 20 --nostream
+                exit 1
+              fi
+            fi
+            
+            # 保存 PM2 配置（开机自启）
+            pm2 save
+            
+            echo ""
+            echo "📊 服务状态"
+            echo "--------------------------------------"
+            pm2 list
+            
+            echo ""
+            echo "📝 服务详情"
+            echo "--------------------------------------"
+            pm2 info coding-usage-web
+            
+            echo ""
+            echo "📄 最近日志（最后15行）"
+            echo "--------------------------------------"
+            pm2 logs coding-usage-web --lines 15 --nostream
+            
+            echo ""
+            echo "======================================"
+            echo "🎉 部署完成！"
+            echo "======================================"
+            echo "部署目录: $DEPLOY_DIR"
+            echo "完成时间: $(date '+%Y-%m-%d %H:%M:%S')"
+            echo ""
+            echo "💡 提示："
+            echo "  - 查看实时日志: pm2 logs coding-usage-web"
+            echo "  - 查看服务状态: pm2 status"
+            echo "  - 重启服务: pm2 restart coding-usage-web"
+            echo "  - 停止服务: pm2 stop coding-usage-web"
+            echo "======================================"

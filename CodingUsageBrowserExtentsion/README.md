@@ -1,110 +1,154 @@
 # AI IDE Usage Token Extractor
 
-A browser extension to automatically extract session tokens from multiple AI IDEs (Cursor, Trae) for seamless integration.
-
-## Supported Platforms
-
-| Platform | Cookie/Token Name | Dashboard URL |
-|----------|------------------|---------------|
-| **Cursor** | `WorkosCursorSessionToken` | cursor.com/dashboard |
-| **Trae** | `X-Cloudide-Session` | trae.ai/account-setting#usage |
+Automatically extract and copy session tokens from Cursor and Trae AI platforms for seamless IDE integration.
 
 ## Features
 
-- **Multi-platform support**: Extract tokens from Cursor and Trae with one extension
-- **Auto-extraction**: Automatically detects and extracts session tokens when visiting dashboards
-- **Auto-copy**: Tokens are automatically copied to clipboard with proper prefix
-- **Toast notifications**: Visual feedback when tokens are copied
-- **Quick access buttons**: Jump to platform dashboards with one click
-- **Extensible design**: Easy to add support for more AI IDEs in the future
+- Automatic token detection and extraction from dashboard visits
+- One-click copy to clipboard with proper formatting
+- Visual feedback through toast notifications and badge indicators
+- Support for multiple AI IDE platforms (Cursor and Trae)
+- Zero configuration required
 
 ## Installation
 
-### From Release (Recommended)
-1. Go to the [Releases](../../releases) page
-2. Download the latest `.crx` or `.zip` file
-3. Open your browser's extension management page:
-   - **Chrome**: `chrome://extensions/`
-   - **Edge**: `edge://extensions/`
-4. Enable "Developer mode" in the top right
-5. Drag and drop the `.crx` file or click "Load unpacked" and select the extracted folder
+### From Browser Store
+1. Install from Chrome Web Store or Microsoft Edge Add-ons
+2. Visit your AI IDE platform and log in
+3. Token automatically extracted and copied to clipboard
 
-### From Source
-1. Clone this repository
-2. Open your browser's extension management page
+### Manual Installation
+1. Download or clone this repository
+2. Open `chrome://extensions/` in your browser
 3. Enable "Developer mode"
-4. Click "Load unpacked" and select the `TraeUsageWebExtentsion` folder
+4. Click "Load unpacked" and select the extension directory
 
 ## Usage
 
-### For Cursor
-1. Click the extension icon
-2. Click "Go to Cursor Dashboard"
-3. The extension auto-extracts `WorkosCursorSessionToken` and copies it to clipboard
-4. A toast notification confirms successful copying
-5. Return to Cursor IDE - the extension will auto-update the session
+### Cursor
+1. Navigate to cursor.com/dashboard
+2. Extension automatically extracts `WorkosCursorSessionToken`
+3. Token copied to clipboard with format: `WorkosCursorSessionToken=<value>`
+4. Return to your IDE - the extension will auto-configure
 
-### For Trae
-1. Click the extension icon
-2. Click "Go to Trae Usage Page"
-3. The extension auto-extracts `X-Cloudide-Session` and copies it to clipboard
-4. A toast notification confirms successful copying
-5. Return to Trae IDE - the extension will auto-update the session
+### Trae
+1. Navigate to trae.ai/account-setting#usage
+2. Extension monitors API calls and extracts `X-Cloudide-Session`
+3. Token copied to clipboard with format: `X-Cloudide-Session=<value>`
+4. Return to your IDE - the extension will auto-configure
+
+## How It Works
+
+**Cursor Platform:**
+- Detects dashboard page visits
+- Reads WorkosCursorSessionToken from browser cookies
+- Automatically copies formatted token to clipboard
+
+**Trae Platform:**
+- Monitors ide_user_pay_status API requests
+- Reads X-Cloudide-Session from browser cookies
+- Uses smart debouncing to avoid multiple extractions
+
+## Extension Interface
+
+Click the extension icon to access:
+- Quick navigation buttons to platform dashboards
+- Platform-specific extraction instructions
+- Help section with usage guide
 
 ## Technical Details
 
-- Uses Manifest V3 for modern browser compatibility
-- Monitors cookies via `chrome.cookies` API
-- Cursor: Triggers on dashboard page load
-- Trae: Triggers on `ide_user_pay_status` API detection with debouncing
-- Stores session data in browser's local storage
-- Toast notifications with smooth CSS animations
+### Permissions Required
+- `activeTab` - Read current tab URL
+- `storage` - Store extracted tokens locally
+- `webRequest` - Monitor network requests for Trae
+- `tabs` - Detect dashboard visits
+- `cookies` - Read session cookies
+- `clipboardWrite` - Copy tokens to clipboard
 
-## Files
+### Supported Platforms
+- Cursor (*.cursor.com)
+- Trae (*.trae.ai)
 
-- `manifest.json` - Extension configuration
-- `background.js` - Background script for request monitoring and cookie extraction
-- `content.js` - Content script for clipboard operations and toast notifications
-- `popup.html` - Extension popup interface
-- `popup.js` - Popup functionality
-- `icon*.png` - Extension icons
+## Privacy & Security
 
-## Adding New Platforms
+- All processing happens locally in your browser
+- No data sent to external servers
+- Tokens stored only in local browser storage
+- Only accesses specific session cookies on supported domains
+- Open source code available for audit
 
-To add support for a new AI IDE:
+## Integration with IDE Extensions
 
-1. **manifest.json**: Add host permissions and content scripts for the new domain
-2. **background.js**: Add extraction function and event listeners
-3. **content.js**: Add platform-specific toast styling (if needed)
-4. **popup.html/js**: Add new button section
+This browser extension works with IDE extensions:
 
-## Development & Release
+1. Browser extension extracts and copies token to clipboard
+2. IDE extension auto-detects clipboard changes
+3. Session automatically configured without manual steps
 
-### Automatic Building
-This project uses GitHub Actions to automatically build and release:
+## Troubleshooting
 
-1. Create a new tag: `git tag v2.0.0 && git push origin v2.0.0`
-2. GitHub Actions will build and create a release with CRX and ZIP files
+**Token not extracted:**
+- Verify you're logged into the platform
+- Ensure you're on the correct page (dashboard/usage)
+- Check extension badge for status indicator
+- Try refreshing the page
 
-### Manual Building
-```bash
-# Install crx3 globally
-npm install -g crx3
+**Clipboard issues:**
+- Verify clipboard permissions are granted
+- Check browser console for errors (F12)
+- Try using extension popup buttons
 
-# Generate a private key (first time only)
-openssl genrsa -out key.pem 2048
+**Extension not working:**
+- Confirm extension is enabled in chrome://extensions/
+- Verify you're on a supported domain
+- Try reloading the extension
 
-# Build CRX file
-crx3 --keyPath=key.pem --crxPath=AIIDETokenExtractor.crx .
+## Project Structure
+
+```
+├── manifest.json          # Extension configuration
+├── background.js          # Service worker for token extraction
+├── content.js            # Content script for clipboard and UI
+├── popup.html            # Extension popup interface
+├── popup.js              # Popup interaction logic
+├── icon16.png            # Extension icons
+├── icon48.png
+├── icon128.png
+└── package.json          # Package configuration
 ```
 
-## Changelog
+## Development
 
-### v2.0.0
-- Merged CursorUsageTokenExtractor into this extension
-- Added multi-platform support (Cursor + Trae)
-- Redesigned popup UI with platform sections
-- Improved toast notifications with platform-specific styling
+### Building from Source
+```bash
+git clone <repository-url>
+cd trae-usage-web-extension
+npm run package
+```
 
-### v1.2.5
-- Initial Trae-only version
+### Testing Locally
+1. Make code changes
+2. Navigate to chrome://extensions/
+3. Click "Reload" on the extension card
+4. Test on supported platforms
+
+## Version History
+
+**v1.3.0** - Current version
+- Multi-platform support (Cursor + Trae)
+- Enhanced popup UI
+- Smart API monitoring with debouncing
+- Improved notifications and status indicators
+
+## License
+
+MIT License
+
+## Support
+
+For issues and questions, please open an issue on the project repository.
+
+---
+
+Made for AI developers who want seamless IDE integration

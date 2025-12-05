@@ -1,14 +1,41 @@
+# 开发配置文件
 .vscode/**
 .vscode-test/**
-src/**
+.idea/**
 .gitignore
 .yarnrc
-vsc-extension-quickstart.md
+esbuild.js
 **/tsconfig.json
 **/.eslintrc.json
-**/*.map
+
+# 源代码文件
+src/**
 **/*.ts
+
+# 构建输出和调试文件
+**/*.map
+**/*-debug*
+**/*debug*
+
+# 依赖和包管理
 node_modules
+
+# 文档和说明文件
+vsc-extension-quickstart.md
+
+# Git 相关
 .github
-esbuild.js
-.idea/**
+
+# 资源文件
+img/codeusage.gif
+
+# SQL.js 相关文件排除
+# 排除嵌套的 out 目录（sql.js 完整 dist - 不需要）
+out/out/**
+
+# 排除不必要的 sql.js 变体
+**/sql-asm*.js
+**/worker.*.js
+
+# 只保留 sql-wasm.wasm，排除 sql-wasm.js（已打包在 extension.js 中）
+out/sql-wasm.js

@@ -2,7 +2,7 @@
   "name": "coding-usage",
   "displayName": "Coding Usage",
   "description": "Share Cursor/Trae usage statistics with your team",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "whyuds",
   "repository": {
     "type": "git",
@@ -24,32 +24,27 @@
     "commands": [
       {
         "command": "cursorUsage.refresh",
-        "title": "Cursor Usage: Refresh",
+        "title": "Coding Usage: Refresh",
         "icon": "$(refresh)"
       },
       {
         "command": "cursorUsage.updateSession",
-        "title": "Cursor Usage: Update Session Token",
+        "title": "Coding Usage: Update Session Token",
         "icon": "$(settings-gear)"
       },
       {
         "command": "cursorUsage.showOutput",
-        "title": "Cursor Usage: Show Output",
+        "title": "Coding Usage: Show Output",
         "icon": "$(output)"
       },
       {
-        "command": "cursorUsage.regenerateApiKey",
-        "title": "Cursor Usage: Regenerate Client API Key",
-        "icon": "$(key)"
-      },
-      {
         "command": "cursorUsage.copyApiKey",
-        "title": "Cursor Usage: Copy Client API Key",
+        "title": "Coding Usage: Copy Client API Key",
         "icon": "$(copy)"
       }
     ],
     "configuration": {
-      "title": "Cursor Usage",
+      "title": "Coding Usage",
       "properties": {
         "cursorUsage.sessionToken": {
           "type": "string",
@@ -64,8 +59,19 @@
         "cursorUsage.clientApiKey": {
           "type": "string",
           "default": "",
-          "description": "Auto-generated client API key (based on hostname and MAC address). Use 'Cursor Usage: Regenerate Client API Key' command to regenerate.",
+          "description": "Auto-generated client API key (based on app name and account). Automatically updates when account changes.",
           "readOnly": true
+        },
+        "cursorUsage.lastAccountId": {
+          "type": "string",
+          "default": "",
+          "description": "Last known account ID for API key generation (internal use)",
+          "readOnly": true
+        },
+        "cursorUsage.enableReporting": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable reporting usage data to team server (default: disabled)"
         }
       }
     }

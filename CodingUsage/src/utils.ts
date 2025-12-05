@@ -53,9 +53,24 @@ export async function setClientApiKey(apiKey: string): Promise<void> {
   await getConfig().update('clientApiKey', apiKey, vscode.ConfigurationTarget.Global);
 }
 
+// 获取上次的账号ID（用于检测账号变化）
+export function getLastAccountId(): string {
+  return getConfig().get<string>('lastAccountId') || '';
+}
+
+// 设置上次的账号ID
+export async function setLastAccountId(accountId: string): Promise<void> {
+  await getConfig().update('lastAccountId', accountId, vscode.ConfigurationTarget.Global);
+}
+
 // 设置团队服务器 URL
 export async function setTeamServerUrl(url: string): Promise<void> {
   await getConfig().update('teamServerUrl', url, vscode.ConfigurationTarget.Global);
+}
+
+// 检查是否启用投递
+export function isReportingEnabled(): boolean {
+  return getConfig().get<boolean>('enableReporting') || false;
 }
 
 // ==================== 输出通道管理 ====================
@@ -63,8 +78,7 @@ let outputChannel: vscode.OutputChannel;
 
 export function getOutputChannel(): vscode.OutputChannel {
   if (!outputChannel) {
-    const appName = getAppDisplayName();
-    outputChannel = vscode.window.createOutputChannel(`${appName} Usage`);
+    outputChannel = vscode.window.createOutputChannel('Coding Usage');
   }
   return outputChannel;
 }
@@ -155,9 +169,9 @@ export type BrowserType = 'chrome' | 'edge' | 'unknown';
 export function getBrowserExtensionUrl(browserType: BrowserType): string {
   // 统一使用 Cursor 的浏览器扩展
   if (browserType === 'edge') {
-    return 'https://microsoftedge.microsoft.com/addons/detail/hgabfbdfbpplaoakjkclmijoegfgcdli';
+    return 'https://microsoftedge.microsoft.com/addons/detail/trae-usage-token-extracto/leopdblngeedggognlgokdlfpiojalji';
   }
-  return 'https://chromewebstore.google.com/detail/cursor-session-token-extr/pchppfhkjloedakahedjknknjppjpple';
+  return 'https://chromewebstore.google.com/detail/trae-usage-token-extracto/edkpaodbjadikhahggapfilgmfijjhei';
 }
 
 // ==================== Dashboard URL ====================

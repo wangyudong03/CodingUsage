@@ -1,0 +1,18 @@
+<!-- Bind API Key Modal -->
+<div class="modal-overlay" id="bindModal">
+  <div class="modal">
+    <div class="modal-title">Bind API Key</div>
+    <div class="modal-desc">
+      Enter your Client API Key from the Cursor Usage extension. You can find it in Cursor Settings → Extensions →
+      Cursor Usage → Client API Key, or use the "Copy Client API Key" command.
+    </div>
+    <input type="text" class="modal-input" id="apiKeyInput" placeholder="ck_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      maxlength="35" />
+    <div class="modal-error" id="bindError"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="cancelBind">Cancel</button>
+      <button type="button" class="btn-primary" id="confirmBind">Bind</button>
+    </div>
+  </div>
+</div>
+

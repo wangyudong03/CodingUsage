@@ -23,6 +23,11 @@ export interface UsageSummaryResponse {
         bonus: number;
         total: number;
       };
+      // API 和 Auto 订阅使用统计
+      autoSpend?: number;
+      apiSpend?: number;
+      autoLimit?: number;
+      apiLimit?: number;
     };
   };
 }

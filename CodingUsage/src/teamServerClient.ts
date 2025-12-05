@@ -2,76 +2,76 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import axios from 'axios';
-import { networkInterfaces } from 'os';
 import { 
   logWithTime, 
   getAppDisplayName, 
-  getAppType,
-  getConfig, 
   getTeamServerUrl, 
   getClientApiKey, 
   setClientApiKey, 
-  setTeamServerUrl 
+  setTeamServerUrl,
+  isReportingEnabled,
+  getLastAccountId,
+  setLastAccountId
 } from './utils';
 import { UsageSummaryResponse, BillingCycleResponse, getApiService } from './apiService';
-import serverListConfig from './serverList.json';
 
 const API_TIMEOUT = 5000;
+const SERVER_LIST_URL = 'https://gist.githubusercontent.com/wangyudong03/60b1dac84abee807ffe3d1aa0ac60967/raw/coding_usage_config.json';
+
+// 从远程获取服务器列表（只在 team server 未配置时调用一次）
+async function fetchServerList(): Promise<string[]> {
+  try {
+    logWithTime('从远程获取服务器列表...');
+    // 加时间戳绕过 GitHub CDN 缓存
+    const url = `${SERVER_LIST_URL}?t=${Date.now()}`;
+    const response = await axios.get(url, { timeout: 5000 });
+    const servers = response.data?.servers || [];
+    logWithTime(`获取到 ${servers.length} 个服务器配置`);
+    return servers;
+  } catch (e) {
+    logWithTime(`获取远程服务器列表失败: ${e}`);
+    return [];
+  }
+}
 
 // ==================== ApiKey 生成器 ====================
-export class ApiKeyGenerator {
-  // 获取 MAC 地址
-  static getMacAddress(): string {
-    const interfaces = networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-      const iface = interfaces[name];
-      if (!iface) continue;
-      for (const info of iface) {
-        if (!info.internal && info.mac && info.mac !== '00:00:00:00:00:00') {
-          return info.mac;
-        }
-      }
-    }
-    return `fallback-${os.userInfo().username}-${os.platform()}`;
-  }
+const API_KEY_SALT = '123456';
 
-  // 生成 apikey（基于 hostname + MAC 地址 + appName），带 ck_ 前缀
-  static generateApiKey(salt?: string): string {
-    const hostname = os.hostname();
-    const mac = this.getMacAddress();
+export class ApiKeyGenerator {
+  // 生成 apikey（基于 appName + 账号ID + 固定盐），带 ck_ 前缀
+  static generateApiKey(accountId: string): string {
     const appName = vscode.env.appName || 'Unknown';
-    const baseString = `${hostname}-${mac}-${appName}${salt ? `-${salt}` : ''}`;
+    const baseString = `${appName}-${accountId}-${API_KEY_SALT}`;
     const hash = crypto.createHash('md5').update(baseString).digest('hex');
     return `ck_${hash}`;
   }
 
-  // 生成带时间戳盐的新 apikey（用于重新生成）
-  static regenerateApiKey(): string {
-    const salt = Date.now().toString();
-    return this.generateApiKey(salt);
-  }
-
-  // 获取或创建 apikey
-  static async getOrCreateApiKey(): Promise<string> {
-    const existingKey = getClientApiKey();
-    
-    if (existingKey) {
-      logWithTime(`已存在 Client API Key: ${existingKey.substring(0, 11)}...`);
-      return existingKey;
+  // 检查账号变化并更新 API Key
+  static async checkAndUpdateApiKey(accountId: string): Promise<string> {
+    if (!accountId) {
+      logWithTime('账号ID为空，跳过 API Key 更新');
+      return getClientApiKey();
     }
 
-    const newKey = this.generateApiKey();
-    await setClientApiKey(newKey);
-    logWithTime(`生成新的 Client API Key: ${newKey.substring(0, 11)}...`);
-    return newKey;
+    const lastAccountId = getLastAccountId();
+    const currentApiKey = getClientApiKey();
+    const expectedApiKey = this.generateApiKey(accountId);
+
+    // 如果账号变化或 API Key 不匹配，则更新
+    if (lastAccountId !== accountId || currentApiKey !== expectedApiKey) {
+      logWithTime(`账号变化 (${lastAccountId || '无'} -> ${accountId})，更新 API Key`);
+      await setClientApiKey(expectedApiKey);
+      await setLastAccountId(accountId);
+      logWithTime(`API Key 已更新: ${expectedApiKey.substring(0, 11)}...`);
+      return expectedApiKey;
+    }
+
+    return currentApiKey;
   }
 
-  // 重新生成 apikey
-  static async regenerate(): Promise<string> {
-    const newKey = this.regenerateApiKey();
-    await setClientApiKey(newKey);
-    logWithTime(`重新生成 Client API Key: ${newKey.substring(0, 11)}...`);
-    return newKey;
+  // 获取当前 API Key（如果存在）
+  static getApiKey(): string {
+    return getClientApiKey();
   }
 }
 
@@ -89,7 +89,7 @@ export class ServerDiscovery {
 
   // 从列表中找到第一个可用的 coding-usage 服务
   static async discoverServer(): Promise<string | null> {
-    const servers = serverListConfig.servers || [];
+    const servers = await fetchServerList();
     for (const url of servers) {
       logWithTime(`检查服务器: ${url}`);
       const isValid = await this.checkHealth(url);
@@ -134,31 +134,38 @@ export class TeamServerClient {
 
   // 提交 Cursor 使用数据到团队服务器
   static async submitCursorUsage(sessionToken: string, summary: UsageSummaryResponse, billing: BillingCycleResponse): Promise<void> {
-    const { url, apiKey } = this.getConfig();
-    if (!url || !apiKey) return;
+    if (!isReportingEnabled()) {
+      logWithTime('投递功能未启用，跳过提交');
+      return;
+    }
+    const url = getTeamServerUrl();
+    if (!url) return;
     
     try {
       const apiService = getApiService();
       const me = await apiService.fetchCursorUserInfo(sessionToken);
+      
+      // 检查账号变化并更新 API Key（使用 email 作为账号标识）
+      const apiKey = await ApiKeyGenerator.checkAndUpdateApiKey(me.email);
+      if (!apiKey) return;
+
       const plan = summary.individualUsage.plan;
-      // 使用breakdown.total如果存在，否则使用used
-      const totalUsed = plan.breakdown?.total ?? plan.used;
-      const bonus = plan.breakdown?.bonus ?? 0;
       const body = {
         client_token: apiKey,
         email: me.email,
         expire_time: Number(billing.endDateEpochMillis),
-        total_usage: plan.limit,
-        used_usage: totalUsed,
-        bonus_usage: bonus,
-        remaining_usage: plan.remaining,
         membership_type: summary.membershipType,
+        // API 和 Auto 使用数据
+        api_spend: plan.apiSpend ?? 0,
+        api_limit: plan.apiLimit ?? 0,
+        auto_spend: plan.autoSpend ?? 0,
+        auto_limit: plan.autoLimit ?? 0,
         host: os.hostname(),
         platform: os.platform(),
         app_name: vscode.env.appName
       };
       logWithTime(`提交使用数据: ${JSON.stringify(body)}`);
-      await axios.post(`${url}/api/usage`, body, { headers: { 'X-Api-Key': apiKey }, timeout: API_TIMEOUT });
+      await axios.post(`${url}/api/cursor-usage`, body, { headers: { 'X-Api-Key': apiKey }, timeout: API_TIMEOUT });
       logWithTime('提交使用数据成功');
     } catch (e) {
       logWithTime(`提交使用数据失败: ${e}`);
@@ -170,29 +177,33 @@ export class TeamServerClient {
     expire_time: number;
     total_usage: number;
     used_usage: number;
-    bonus_usage: number;
-    remaining_usage: number;
     membership_type: string;
   }): Promise<void> {
-    const { url, apiKey } = this.getConfig();
-    if (!url || !apiKey) return;
+    if (!isReportingEnabled()) {
+      logWithTime('投递功能未启用，跳过提交');
+      return;
+    }
+    const url = getTeamServerUrl();
+    if (!url) return;
     
     try {
+      // 检查账号变化并更新 API Key（使用 user_id/email 作为账号标识）
+      const apiKey = await ApiKeyGenerator.checkAndUpdateApiKey(email);
+      if (!apiKey) return;
+
       const body = {
         client_token: apiKey,
         email: email,
         expire_time: usageData.expire_time,
         total_usage: usageData.total_usage,
         used_usage: usageData.used_usage,
-        bonus_usage: usageData.bonus_usage,
-        remaining_usage: usageData.remaining_usage,
         membership_type: usageData.membership_type,
         host: os.hostname(),
         platform: os.platform(),
         app_name: vscode.env.appName
       };
       logWithTime(`提交使用数据: ${JSON.stringify(body)}`);
-      await axios.post(`${url}/api/usage`, body, { headers: { 'X-Api-Key': apiKey }, timeout: API_TIMEOUT });
+      await axios.post(`${url}/api/trae-usage`, body, { headers: { 'X-Api-Key': apiKey }, timeout: API_TIMEOUT });
       logWithTime('提交使用数据成功');
     } catch (e) {
       logWithTime(`提交使用数据失败: ${e}`);
@@ -227,7 +238,7 @@ export class TeamServerClient {
     const { url, apiKey } = this.getConfig();
     if (!url || !apiKey) return false;
     try {
-      logWithTime(`Ping platform: active=${typeof active === 'undefined' ? 'true' : String(active)}`);
+      // logWithTime(`Ping platform: active=${typeof active === 'undefined' ? 'true' : String(active)}`);
       await axios.post(`${url}/api/ping`, { active, client_token: apiKey }, { headers: { 'X-Api-Key': apiKey }, timeout: API_TIMEOUT });
       if (!this.teamHint && active !== false) this.teamHint = true;
       return true;

@@ -1,0 +1,29 @@
+<nav class="nav">
+  <div class="left">
+    <a href="<%= basePath %>/" class="brand">
+      <img src="<%= basePath %>/static/web_logo.png" alt="Logo" style="width: 24px; height: 24px;" />
+      Coding Usage
+    </a>
+  </div>
+  <div class="right">
+    <% if (locals.showPlazaLink) { %>
+      <% if (hasBoundKeys) { %>
+        <a href="<%= basePath %>/">My Stats (<%= boundApiKeysCount %>)</a>
+      <% } %>
+    <% } else if (locals.showMyStatsLink) { %>
+      <a href="<%= basePath %>/plaza">Plaza</a>
+    <% } %>
+    <button type="button" class="btn-primary" id="bindKeyBtn">
+      <svg class="octicon" viewBox="0 0 16 16" width="16" height="16">
+        <% if (locals.showPlazaLink) { %>
+          <path d="M6.5 5.5a4 4 0 0 1 7.43 2.11.75.75 0 0 0 1.49-.16 5.5 5.5 0 1 0-10.4 3.38l-.08.08-1.63 1.63A1.75 1.75 0 0 0 3 13.75V15h1.25a1.75 1.75 0 0 0 1.24-.51l.52-.52h1.5c.69 0 1.25-.56 1.25-1.25v-.25h.75c.69 0 1.25-.56 1.25-1.25V10h1.01a.75.75 0 0 0 .53-.22l.09-.09.08-.04A4 4 0 0 0 6.5 5.5zM9 5.5a1 1 0 1 1 2 0 1 1 0 0 1-2 0z"></path>
+        <% } else { %>
+          <path d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 010 1.5H8.5v4.25a.75.75 0 01-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"></path>
+        <% } %>
+      </svg>
+      <%= locals.showPlazaLink ? 'Bind API Key' : 'Add API Key' %>
+    </button>
+  </div>
+</nav>
+
+

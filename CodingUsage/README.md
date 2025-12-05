@@ -1,40 +1,66 @@
-# Cursor Usage Monitor
+# Coding Usage
 
-No need to manually obtain or set cookies, the entire process is automated. Monitor your Cursor AI usage statistics directly in Cursor. This extension displays your current billing period usage information in the status bar. Updated sync behavior: the extension checks the local database every 5 seconds and only requests the Cursor API when a conversation change is detected, eliminating unnecessary polling.
+**Effortless AI Usage Tracking** - No manual cookie extraction needed. This extension monitors your Cursor/Trae AI usage directly in your editor with automatic configuration and intelligent sync.
 
-![Cursor Usage Monitor Demo](CursorUsage/img/cursorusage.gif)
+![Coding Usage Monitor Demo](img/cursorusage.gif)
+
+## ✨ Highlights
+
+- **🎯 Zero-Configuration Setup**: Browser extension auto-extracts session tokens from clipboard
+- **⚡ Smart Sync**: Database-driven monitoring checks local changes every 5 seconds, only calls API when needed
+- **🌐 Multi-Platform Support**: Works with both Cursor and Trae AI editors
+- **👥 Team Collaboration**: Optional team server integration for shared usage tracking
+- **🔐 Privacy-First**: Client API keys generated from device fingerprint (hostname + MAC)
+- **🔄 Auto-Discovery**: Automatically finds and configures available team servers
+- **📊 Rich Status Display**: Detailed tooltips with usage breakdown, progress bars, and billing cycle info
 
 ## Features
 
-- Real-time monitoring of Cursor AI usage
-- Display of current billing period and usage statistics
-- Easy configuration through VS Code settings
+- Real-time usage monitoring with smart sync (no unnecessary polling)
+- Visual progress bars and percentage indicators
+- Automatic session token detection from clipboard
+- Team server connectivity with health checks
+- Support for both Cursor and Trae platforms
+- One-click configuration through browser extensions
 
 ## Requirements
 
-You need to have a Cursor account and extract your session token from Cursor.com cookies.
+- A Cursor or Trae account
+- Browser extension for automatic token extraction (optional but recommended)
 
 ## Extension Settings
 
-This extension contributes the following settings:
+* `cursorUsage.sessionToken`: Session token (auto-configured via browser extension)
+* `cursorUsage.teamServerUrl`: Team server URL (auto-discovered from server list)
+* `cursorUsage.clientApiKey`: Auto-generated device identifier (read-only)
 
-* `cursorUsage.sessionToken`: The WorkosCursorSessionToken value from Cursor.com cookies
-* `cursorUsage.refreshInterval`: Interval in seconds to refresh usage data automatically (default: 300)
+## Quick Start
 
-## How to Get Your Session Token
-
-1. Install the Cursor Session Token Extractor Browser Extension:
-   - [Chrome Web Store](https://chromewebstore.google.com/detail/cursor-session-token-extr/pchppfhkjloedakahedjknknjppjpple)
-   - [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/hgabfbdfbpplaoakjkclmijoegfgcdli)
-2. Visit cursor.com and log in to your account
-3. The browser extension will automatically extract your session token
-4. Return to Cursor, and the CursorUsage will automatically read your clipboard and update the configuration.
-
+### Automatic Setup
+1. Install the browser extension:
+   - [Chrome Web Store](https://chromewebstore.google.com/detail/trae-usage-token-extracto/edkpaodbjadikhahggapfilgmfijjhei)
+   - [Microsoft Edge Add-ons](https://microsoftedge.microsoft.com/addons/detail/trae-usage-token-extracto/leopdblngeedggognlgokdlfpiojalji)
+2. Visit cursor.com or trae.ai and log in
+3. Token auto-copied to clipboard → extension auto-configures
+4. Done! 🎉
 
 ## Usage
 
-Once configured, the extension will display your Cursor usage in the status bar. Click on the status bar item to refresh the data manually.
+- **Single Click**: Refresh usage data
+- **Double Click**: Open configuration menu
+- **Status Bar**: Shows real-time usage with color-coded alerts
+
+## Team Features (Optional)
+
+Configure team server URL to enable:
+- Shared usage tracking across team members
+- Historical usage data and analytics
+- Automated ping for connection status
 
 ## License
 
 MIT
+
+---
+
+**Note**: This extension works with both Cursor and Trae AI editors, automatically detecting your platform.
