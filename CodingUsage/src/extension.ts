@@ -900,15 +900,6 @@ class ClipboardMonitor {
   async checkForToken(): Promise<void> {
     try {
       const clipboardText = await vscode.env.clipboard.readText();
-
-      // Check for new JSON config format
-      const configMatch = this.tryParseConfigFormat(clipboardText);
-      if (configMatch) {
-        await this.handleConfigDetected(configMatch);
-        return;
-      }
-
-      // Check for session token format based on app type
       const tokenPattern = getClipboardTokenPattern();
       const tokenMatch = clipboardText.match(tokenPattern);
       if (tokenMatch?.[1]) {
@@ -916,64 +907,6 @@ class ClipboardMonitor {
       }
     } catch (error) {
       logWithTime(`Clipboard check failed: ${error}`);
-    }
-  }
-
-  private tryParseConfigFormat(clipboardText: string): { host: string } | null {
-    try {
-      const config = JSON.parse(clipboardText);
-      if (config && typeof config.host === 'string') {
-        return { host: config.host };
-      }
-    } catch {
-      // Not JSON, continue
-    }
-
-    const lines = clipboardText.split('\n');
-    let host = '';
-
-    for (const line of lines) {
-      const hostMatch = line.match(/host["\s]*[:=]["\s]*([^"\s,}]+)/i);
-      if (hostMatch) host = hostMatch[1];
-    }
-
-    if (host) {
-      return { host };
-    }
-
-    return null;
-  }
-
-  private async handleConfigDetected(config: { host: string }): Promise<void> {
-    const currentUrl = getTeamServerUrl();
-
-    const configSignature = config.host;
-    if (configSignature === this.lastNotifiedConfig) {
-      return;
-    }
-
-    if (config.host === currentUrl) {
-      vscode.window.showInformationMessage('Configuration already applied. Opening settings...');
-      await this.openExtensionSettings();
-      this.lastNotifiedConfig = configSignature;
-      return;
-    }
-
-    const choice = await vscode.window.showInformationMessage(
-      `Found new configuration.\nHost: ${config.host}\nApply this configuration?`,
-      'Apply & Open Settings',
-      'Cancel'
-    );
-
-    if (choice === 'Apply & Open Settings') {
-      const configObj = getConfig();
-      await configObj.update('teamServerUrl', config.host, vscode.ConfigurationTarget.Global);
-      await TeamServerClient.checkAndUpdateConnectionStatus();
-      await vscode.commands.executeCommand('cursorUsage.refresh');
-      vscode.window.showInformationMessage('Configuration applied successfully!');
-      await this.openExtensionSettings();
-      this.lastNotifiedConfig = configSignature;
-      logWithTime(`Applied new configuration: ${config.host}`);
     }
   }
 
