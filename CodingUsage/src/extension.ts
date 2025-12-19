@@ -412,8 +412,7 @@ export class CodingUsageProvider {
       const apiProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(apiPercentUsed);
 
       md.appendMarkdown(`${label}  Expire: ${expireTime}\n\n`);
-      md.appendMarkdown(`API ($${apiUsageDollars.toFixed(2)}/${apiLimitDollars.toFixed(0)})\n`);
-      md.appendMarkdown(`[${apiProgressInfo.progressBar}] ${apiPercentUsed.toFixed(1)}%\n`);
+      md.appendMarkdown(`API ($${apiUsageDollars.toFixed(2)}/${apiLimitDollars.toFixed(0)}) \u00A0\u00A0\u00A0[${apiProgressInfo.progressBar}] ${apiPercentUsed.toFixed(1)}%\n`);
     }
 
     // Auto 使用进度
@@ -423,8 +422,7 @@ export class CodingUsageProvider {
       const autoProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(autoPercentUsed);
 
       md.appendMarkdown('\n');
-      md.appendMarkdown(`Auto ($${autoUsageDollars.toFixed(2)}/${autoLimitDollars.toFixed(0)})\n`);
-      md.appendMarkdown(`[${autoProgressInfo.progressBar}] ${autoPercentUsed.toFixed(1)}%\n`);
+      md.appendMarkdown(`Auto($${autoUsageDollars.toFixed(2)}/${autoLimitDollars.toFixed(0)}) [${autoProgressInfo.progressBar}] ${autoPercentUsed.toFixed(1)}%\n`);
     }
 
     // 如果没有 API/Auto 数据，回退显示总体使用量
@@ -446,8 +444,7 @@ export class CodingUsageProvider {
       const onDemandProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(onDemandPercent);
 
       md.appendMarkdown('\n');
-      md.appendMarkdown(`OnDemand ($${onDemandUsedDollars.toFixed(2)}/${onDemandLimitDollars.toFixed(0)})\n`);
-      md.appendMarkdown(`[${onDemandProgressInfo.progressBar}] ${onDemandPercent.toFixed(1)}%\n`);
+      md.appendMarkdown(`ODM ($${onDemandUsedDollars.toFixed(2)}/${onDemandLimitDollars.toFixed(0)}) [${onDemandProgressInfo.progressBar}] ${onDemandPercent.toFixed(1)}%\n`);
     }
 
     // Token 使用统计（放在最后）
@@ -548,7 +545,7 @@ export class CodingUsageProvider {
    * 根据百分比构建进度条
    */
   public static buildProgressBarFromPercent(percent: number): { progressBar: string; percentage: number } {
-    const progressBarLength = 25;
+    const progressBarLength = 15;
     const filledLength = Math.round((percent / 100) * progressBarLength);
     const clampedFilled = Math.max(0, Math.min(filledLength, progressBarLength));
     const progressBar = '█'.repeat(clampedFilled) + '░'.repeat(progressBarLength - clampedFilled);
@@ -660,7 +657,7 @@ export class CodingUsageProvider {
   // ==================== 通用工具方法 ====================
   public static buildProgressBar(used: number, limit: number): { progressBar: string; percentage: number } {
     const percentage = limit > 0 ? Math.round((used / limit) * 100) : 0;
-    const progressBarLength = 25;
+    const progressBarLength = 15;
     const filledLength = limit > 0 ? Math.round((used / limit) * progressBarLength) : 0;
     const clampedFilled = Math.max(0, Math.min(filledLength, progressBarLength));
     const progressBar = '█'.repeat(clampedFilled) + '░'.repeat(progressBarLength - clampedFilled);
