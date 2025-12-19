@@ -6,11 +6,11 @@ import * as fs from 'fs-extra';
 import * as crypto from 'crypto';
 import initSqlJs from 'sql.js';
 
-import { 
-  disposeOutputChannel, 
-  getOutputChannel, 
-  logWithTime, 
-  formatTimestamp, 
+import {
+  disposeOutputChannel,
+  getOutputChannel,
+  logWithTime,
+  formatTimestamp,
   getSessionToken,
   setSessionToken,
   isRetryableError,
@@ -28,10 +28,11 @@ import {
   isReportingEnabled,
   setLastAccountId
 } from './utils';
-import { 
-  getApiService, 
-  UsageSummaryResponse, 
+import {
+  getApiService,
+  UsageSummaryResponse,
   BillingCycleResponse,
+  AggregatedUsageResponse,
   TraeApiResponse,
   TraeEntitlementPack
 } from './apiService';
@@ -101,6 +102,7 @@ interface TraeUsageStats {
 export class CodingUsageProvider {
   private billingCycleData: BillingCycleResponse | null = null;
   private summaryData: UsageSummaryResponse | null = null;
+  private aggregatedUsageData: AggregatedUsageResponse | null = null;
   private traeUsageData: TraeApiResponse | null = null;
   private retryTimer: NodeJS.Timeout | null = null;
   private clickTimer: NodeJS.Timeout | null = null;
@@ -192,12 +194,12 @@ export class CodingUsageProvider {
     this.isRefreshing = true;
     this.isAuthFailed = false;
     this.setLoadingState();
-    
+
     // Trae 需要清除缓存
     if (APP_TYPE === 'trae') {
       this.apiService.clearTraeCache();
     }
-    
+
     this.fetchData();
   }
 
@@ -279,31 +281,54 @@ export class CodingUsageProvider {
     const membershipType = this.summaryData.membershipType.toUpperCase();
     const plan = this.summaryData.individualUsage.plan;
 
-    // 主要显示 API 使用进度
-    const apiSpend = plan.apiSpend ?? 0;
-    const apiLimit = plan.apiLimit ?? 0;
-    
-    if (apiLimit > 0) {
-      // 有 API 限制时，显示 API 使用进度
-      const apiSpendDollars = apiSpend / 100;
-      const apiLimitDollars = apiLimit / 100;
-      const percentage = (apiSpend / apiLimit) * 100;
-      
-      this.statusBarItem.text = `⚡ ${membershipType}: ${apiSpendDollars.toFixed(2)}/${apiLimitDollars.toFixed(0)} (${percentage.toFixed(1)}%)`;
+    // 使用新的百分比字段
+    const apiPercentUsed = plan.apiPercentUsed ?? 0;
+    const autoPercentUsed = plan.autoPercentUsed ?? 0;
+    const totalPercentUsed = plan.totalPercentUsed ?? 0;
+
+    // 从聚合数据计算 API 和 Auto 使用量（美分）
+    const { apiUsageCents, autoUsageCents } = this.calculateUsageFromAggregated();
+
+    // 反推限额（如果百分比 > 0）
+    const apiLimitCents = apiPercentUsed > 0 ? (apiUsageCents / apiPercentUsed) * 100 : 0;
+
+    if (apiPercentUsed > 0 || autoPercentUsed > 0) {
+      // 显示 API 使用进度
+      const apiUsageDollars = apiUsageCents / 100;
+      const apiLimitDollars = apiLimitCents / 100;
+      this.statusBarItem.text = `⚡ ${membershipType}: $${apiUsageDollars.toFixed(2)}/${apiLimitDollars.toFixed(0)} (${apiPercentUsed.toFixed(1)}%)`;
     } else {
       // 回退到总体使用量显示
-      const limitCents = plan.limit;
-      const limitDollars = limitCents / 100;
-      const limitWholeDollars = Math.round(limitDollars);
-      const totalUsedCents = plan.breakdown?.total ?? plan.used;
-      const totalUsedDollars = totalUsedCents / 100;
-      const percentage = limitCents > 0 ? (totalUsedCents / limitCents) * 100 : 0;
-      
-      this.statusBarItem.text = `⚡ ${membershipType}: ${totalUsedDollars.toFixed(2)}/${limitWholeDollars} (${percentage.toFixed(1)}%)`;
+      const usedCents = plan.breakdown?.total ?? plan.used;
+      const usedDollars = usedCents / 100;
+      const limitDollars = plan.limit / 100;
+      this.statusBarItem.text = `⚡ ${membershipType}: $${usedDollars.toFixed(2)}/${limitDollars.toFixed(0)} (${totalPercentUsed.toFixed(1)}%)`;
     }
-    
+
     this.statusBarItem.color = undefined;
     this.statusBarItem.tooltip = this.buildCursorDetailedTooltip();
+  }
+
+  /**
+   * 从聚合数据计算 API 和 Auto 使用量
+   */
+  private calculateUsageFromAggregated(): { apiUsageCents: number; autoUsageCents: number } {
+    if (!this.aggregatedUsageData) {
+      return { apiUsageCents: 0, autoUsageCents: 0 };
+    }
+
+    let apiUsageCents = 0;
+    let autoUsageCents = 0;
+
+    for (const event of this.aggregatedUsageData.aggregations) {
+      if (event.modelIntent === 'default') {
+        autoUsageCents += event.totalCents;
+      } else {
+        apiUsageCents += event.totalCents;
+      }
+    }
+
+    return { apiUsageCents, autoUsageCents };
   }
 
   // ==================== Trae 状态显示 ====================
@@ -342,12 +367,18 @@ export class CodingUsageProvider {
 
   // ==================== Cursor Tooltip 构建 ====================
   private buildCursorDetailedTooltip(): string {
-    return CodingUsageProvider.buildCursorTooltipFromData(this.summaryData, this.billingCycleData, new Date());
+    return CodingUsageProvider.buildCursorTooltipFromData(
+      this.summaryData,
+      this.billingCycleData,
+      this.aggregatedUsageData,
+      new Date()
+    );
   }
 
   public static buildCursorTooltipFromData(
     summary: UsageSummaryResponse | null,
     billing: BillingCycleResponse | null,
+    aggregatedData: AggregatedUsageResponse | null,
     currentTime?: Date
   ): string {
     if (!summary || !billing) {
@@ -361,50 +392,74 @@ export class CodingUsageProvider {
 
     const sections: string[] = [];
 
-    // API 使用进度（主要显示）
-    const apiSpend = plan.apiSpend ?? 0;
-    const apiLimit = plan.apiLimit ?? 0;
-    if (apiLimit > 0) {
-      const apiSpendDollars = apiSpend / 100;
-      const apiLimitDollars = apiLimit / 100;
-      const apiProgressInfo = CodingUsageProvider.buildProgressBar(apiSpend, apiLimit);
-      
-      sections.push(`API (${apiSpendDollars.toFixed(2)}/${apiLimitDollars.toFixed(0)})  Expire: ${expireTime}`);
-      sections.push(`[${apiProgressInfo.progressBar}] ${apiProgressInfo.percentage}%`);
+    // 从聚合数据计算使用量
+    const { apiUsageCents, autoUsageCents } = CodingUsageProvider.calculateUsageFromAggregatedStatic(aggregatedData);
+
+    // 获取百分比
+    const apiPercentUsed = plan.apiPercentUsed ?? 0;
+    const autoPercentUsed = plan.autoPercentUsed ?? 0;
+    const totalPercentUsed = plan.totalPercentUsed ?? 0;
+
+    // 反推限额
+    const apiLimitCents = apiPercentUsed > 0 ? (apiUsageCents / apiPercentUsed) * 100 : 0;
+    const autoLimitCents = autoPercentUsed > 0 ? (autoUsageCents / autoPercentUsed) * 100 : 0;
+
+    // API 使用进度
+    if (apiPercentUsed > 0) {
+      const apiUsageDollars = apiUsageCents / 100;
+      const apiLimitDollars = apiLimitCents / 100;
+      const apiProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(apiPercentUsed);
+
+      sections.push(`${label}  Expire: ${expireTime}`);
+      sections.push('');
+      sections.push(`API ($${apiUsageDollars.toFixed(2)}/${apiLimitDollars.toFixed(0)})`);
+      sections.push(`[${apiProgressInfo.progressBar}] ${apiPercentUsed.toFixed(1)}%`);
     }
 
-    // Auto 使用进度（悬停时显示）
-    const autoSpend = plan.autoSpend ?? 0;
-    const autoLimit = plan.autoLimit ?? 0;
-    if (autoLimit > 0) {
-      const autoSpendDollars = autoSpend / 100;
-      const autoLimitDollars = autoLimit / 100;
-      const autoProgressInfo = CodingUsageProvider.buildProgressBar(autoSpend, autoLimit);
-      
+    // Auto 使用进度
+    if (autoPercentUsed > 0) {
+      const autoUsageDollars = autoUsageCents / 100;
+      const autoLimitDollars = autoLimitCents / 100;
+      const autoProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(autoPercentUsed);
+
       sections.push('');
-      sections.push(`Auto (${autoSpendDollars.toFixed(2)}/${autoLimitDollars.toFixed(0)})`);
-      sections.push(`[${autoProgressInfo.progressBar}] ${autoProgressInfo.percentage}%`);
+      sections.push(`Auto ($${autoUsageDollars.toFixed(2)}/${autoLimitDollars.toFixed(0)})`);
+      sections.push(`[${autoProgressInfo.progressBar}] ${autoPercentUsed.toFixed(1)}%`);
     }
 
     // 如果没有 API/Auto 数据，回退显示总体使用量
-    if (apiLimit === 0 && autoLimit === 0) {
-      const limitCents = plan.limit;
-      const limitDollars = limitCents / 100;
-      const limitWholeDollars = Math.round(limitDollars);
-      const totalUsedCents = plan.breakdown?.total ?? plan.used;
-      const totalUsedDollars = totalUsedCents / 100;
-      const bonusCents = plan.breakdown?.bonus ?? 0;
-      const bonusDollars = bonusCents / 100;
-      const progressInfo = CodingUsageProvider.buildProgressBar(totalUsedDollars, limitDollars);
+    if (apiPercentUsed === 0 && autoPercentUsed === 0) {
+      const usedDollars = (plan.breakdown?.total ?? plan.used) / 100;
+      const limitDollars = plan.limit / 100;
+      const progressInfo = CodingUsageProvider.buildProgressBar(usedDollars, limitDollars);
 
-      let header: string;
-      if (bonusCents > 0) {
-        header = `${label}(${limitWholeDollars}+${bonusDollars.toFixed(2)}) Expire: ${expireTime}`;
-      } else {
-        header = `${label} (${totalUsedDollars.toFixed(2)}/${limitWholeDollars})  Expire: ${expireTime}`;
-      }
-      sections.push(header);
-      sections.push(`[${progressInfo.progressBar}] ${progressInfo.percentage}%`);
+      sections.push(`${label} ($${usedDollars.toFixed(2)}/${limitDollars.toFixed(0)})  Expire: ${expireTime}`);
+      sections.push(`[${progressInfo.progressBar}] ${totalPercentUsed.toFixed(1)}%`);
+    }
+
+    // OnDemand 使用进度（如果启用）
+    const onDemand = summary.individualUsage.onDemand;
+    if (onDemand && onDemand.enabled && onDemand.limit !== null) {
+      const onDemandUsedDollars = onDemand.used / 100;
+      const onDemandLimitDollars = onDemand.limit / 100;
+      const onDemandPercent = onDemand.limit > 0 ? (onDemand.used / onDemand.limit) * 100 : 0;
+      const onDemandProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(onDemandPercent);
+
+      sections.push('');
+      sections.push(`OnDemand ($${onDemandUsedDollars.toFixed(2)}/${onDemandLimitDollars.toFixed(0)})`);
+      sections.push(`[${onDemandProgressInfo.progressBar}] ${onDemandPercent.toFixed(1)}%`);
+    }
+
+    // Token 使用统计（放在最后）
+    if (aggregatedData) {
+      const totalInput = parseInt(aggregatedData.totalInputTokens || '0');
+      const totalOutput = parseInt(aggregatedData.totalOutputTokens || '0');
+      const totalCacheWrite = parseInt(aggregatedData.totalCacheWriteTokens || '0');
+      const totalCacheRead = parseInt(aggregatedData.totalCacheReadTokens || '0');
+
+      sections.push('');
+      sections.push('In         Out        Write      Read');
+      sections.push(`${CodingUsageProvider.formatTokenCount(totalInput).padEnd(11)}${CodingUsageProvider.formatTokenCount(totalOutput).padEnd(11)}${CodingUsageProvider.formatTokenCount(totalCacheWrite).padEnd(11)}${CodingUsageProvider.formatTokenCount(totalCacheRead)}`);
     }
 
     const hintText = TeamServerClient.isTeamHintActive() ? "✅Connected" : undefined;
@@ -412,6 +467,52 @@ export class CodingUsageProvider {
     sections.push(CodingUsageProvider.buildTimeSection(currentTime, hintText));
 
     return sections.join('\n');
+  }
+
+  /**
+   * 静态方法：从聚合数据计算使用量
+   */
+  public static calculateUsageFromAggregatedStatic(aggregatedData: AggregatedUsageResponse | null): { apiUsageCents: number; autoUsageCents: number } {
+    if (!aggregatedData) {
+      return { apiUsageCents: 0, autoUsageCents: 0 };
+    }
+
+    let apiUsageCents = 0;
+    let autoUsageCents = 0;
+
+    for (const event of aggregatedData.aggregations) {
+      if (event.modelIntent === 'default') {
+        autoUsageCents += event.totalCents;
+      } else {
+        apiUsageCents += event.totalCents;
+      }
+    }
+
+    return { apiUsageCents, autoUsageCents };
+  }
+
+  /**
+   * 格式化 Token 数量（K/M 单位）
+   */
+  public static formatTokenCount(count: number): string {
+    if (count >= 1000000) {
+      return `${(count / 1000000).toFixed(2)}M`;
+    } else if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}K`;
+    }
+    return String(count);
+  }
+
+  /**
+   * 根据百分比构建进度条
+   */
+  public static buildProgressBarFromPercent(percent: number): { progressBar: string; percentage: number } {
+    const progressBarLength = 25;
+    const filledLength = Math.round((percent / 100) * progressBarLength);
+    const clampedFilled = Math.max(0, Math.min(filledLength, progressBarLength));
+    const progressBar = '█'.repeat(clampedFilled) + '░'.repeat(progressBarLength - clampedFilled);
+
+    return { progressBar, percentage: Math.round(percent) };
   }
 
   public static getCursorSubscriptionTypeLabel(membershipType: string): string {
@@ -540,10 +641,10 @@ export class CodingUsageProvider {
 
   async fetchData(retryCount = 0): Promise<void> {
     logWithTime(`fetchData 开始 (重试次数: ${retryCount}, 手动刷新: ${this.isManualRefresh})`);
-    
+
     // 清除之前的超时定时器
     this.clearFetchTimeout();
-    
+
     // 设置超时保护
     this.fetchTimeoutTimer = setTimeout(() => {
       logWithTime('fetchData 超时，强制重置状态');
@@ -553,7 +654,7 @@ export class CodingUsageProvider {
         vscode.window.showErrorMessage('Request timeout. Please try again.');
       }
     }, FETCH_TIMEOUT);
-  
+
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
@@ -561,7 +662,7 @@ export class CodingUsageProvider {
         this.handleNoSessionToken();
         return;
       }
-  
+
       if (APP_TYPE === 'cursor') {
         await this.fetchCursorData(sessionToken);
       } else if (APP_TYPE === 'trae') {
@@ -570,7 +671,7 @@ export class CodingUsageProvider {
         // 未知应用类型，尝试 Cursor
         await this.fetchCursorData(sessionToken);
       }
-  
+
       this.clearFetchTimeout();
       this.resetRefreshState();  // 先重置状态
       this.updateStatusBar();    // 再更新状态栏
@@ -580,7 +681,7 @@ export class CodingUsageProvider {
       this.handleFetchError(error, retryCount);
     }
   }
-  
+
 
   private clearFetchTimeout(): void {
     if (this.fetchTimeoutTimer) {
@@ -592,18 +693,35 @@ export class CodingUsageProvider {
   private async fetchCursorData(sessionToken: string): Promise<void> {
     logWithTime('开始获取 Cursor 数据');
     try {
+      // 1. 获取使用摘要
       const summary = await this.apiService.fetchCursorUsageSummary(sessionToken);
       logWithTime('成功获取 Cursor 使用量摘要');
-      
+
+      // 从 summary 中获取账单周期时间
       const startMillis = new Date(summary.billingCycleStart).getTime();
       const endMillis = new Date(summary.billingCycleEnd).getTime();
+
       this.billingCycleData = {
         startDateEpochMillis: String(startMillis),
         endDateEpochMillis: String(endMillis)
       };
       this.summaryData = summary;
 
-      await TeamServerClient.submitCursorUsage(sessionToken, summary, this.billingCycleData);
+      // 2. 获取精确的账单周期（用于聚合数据查询）
+      try {
+        const billingCycle = await this.apiService.fetchCursorBillingCycle(sessionToken);
+        const billingStartMillis = parseInt(billingCycle.startDateEpochMillis);
+
+        // 3. 获取聚合使用数据
+        const aggregatedUsage = await this.apiService.fetchCursorAggregatedUsage(sessionToken, billingStartMillis);
+        this.aggregatedUsageData = aggregatedUsage;
+        logWithTime(`获取聚合数据成功: ${aggregatedUsage.aggregations.length} 条记录, 总费用 $${(aggregatedUsage.totalCostCents / 100).toFixed(2)}`);
+      } catch (aggError) {
+        logWithTime(`获取聚合数据失败（非致命）: ${aggError}`);
+        // 聚合数据获取失败不影响主流程
+      }
+
+      await TeamServerClient.submitCursorUsage(sessionToken, summary, this.billingCycleData, this.aggregatedUsageData);
     } catch (error) {
       logWithTime(`获取 Cursor 数据失败: ${error}`);
       throw error;
@@ -704,18 +822,18 @@ export class CodingUsageProvider {
     this.resetRefreshState();  // 先重置
     this.updateStatusBar();    // 再更新
   }
-  
+
 
   private handleFetchError(error: any, retryCount: number): void {
     logWithTime(`获取数据失败 (尝试 ${retryCount + 1}/${MAX_RETRY_COUNT}): ${error}`);
-  
+
     // 处理401认证失败情况
     if (error.response?.status === 401) {
       logWithTime('检测到 401 认证失败');
       this.isAuthFailed = true;
       this.resetRefreshState();  // 先重置
       this.updateStatusBar();    // 再更新
-      
+
       if (this.isManualRefresh) {
         vscode.window.showErrorMessage(
           '认证失败：Session可能无效或已过期，请更新Session',
@@ -728,18 +846,18 @@ export class CodingUsageProvider {
       }
       return;
     }
-  
+
     if (this.isManualRefresh) {
       const message = isRetryableError(error)
         ? 'Network is unstable. Please try again later.'
         : `Failed to get usage data: ${error?.toString() || 'Unknown error'}`;
-  
+
       vscode.window.showErrorMessage(message);
       this.resetRefreshState();  // 先重置
       this.updateStatusBar();    // 再更新
       return;
     }
-  
+
     if (retryCount < MAX_RETRY_COUNT) {
       this.scheduleRetry(retryCount);
     } else {
@@ -748,7 +866,7 @@ export class CodingUsageProvider {
       this.updateStatusBar();    // 再更新
     }
   }
-  
+
 
   private scheduleRetry(retryCount: number): void {
     logWithTime(`API调用失败，将在1秒后进行第${retryCount + 1}次重试`);
@@ -812,10 +930,10 @@ class DbMonitor {
       let baseStoragePath: string;
       const platform = os.platform();
       const homeDir = os.homedir();
-      
+
       // 根据应用类型确定存储路径
       const appFolderName = APP_TYPE === 'trae' ? 'Trae' : (vscode.env.appName || 'Cursor');
-      
+
       switch (platform) {
         case 'win32': {
           const appData = process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
@@ -933,15 +1051,15 @@ class ClipboardMonitor {
 
     if (choice === 'Update') {
       await setSessionToken(token);
-      
+
       // Trae 需要重置主机
       if (APP_TYPE === 'trae') {
         await getApiService().resetTraeToDefaultHost();
       }
-      
+
       // 立即获取账号信息并更新 Last Account ID 和 API Key
       await this.updateAccountInfoAndApiKey();
-      
+
       vscode.window.showInformationMessage('Session token updated automatically.');
       vscode.commands.executeCommand('cursorUsage.refresh');
     }
@@ -995,7 +1113,7 @@ class ClipboardMonitor {
 // ==================== 扩展激活 ====================
 export async function activate(context: vscode.ExtensionContext) {
   logWithTime(`${APP_NAME} Usage Monitor extension is now activated. AppType: ${APP_TYPE}`);
-  
+
   const provider = new CodingUsageProvider(context);
   const clipboardMonitor = new ClipboardMonitor();
   const dbMonitor = new DbMonitor(context, () => provider.fetchData());
@@ -1145,7 +1263,7 @@ async function showUpdateSessionDialog(): Promise<void> {
         const newReportingState = !reportingEnabled;
         const configObj = getConfig();
         await configObj.update('enableReporting', newReportingState, vscode.ConfigurationTarget.Global);
-          const statusText = newReportingState ? 'enabled' : 'disabled';
+        const statusText = newReportingState ? 'enabled' : 'disabled';
         vscode.window.showInformationMessage(`Team reporting ${statusText}!`);
         break;
       case 'copyKeyAndOpenServer':
@@ -1155,7 +1273,7 @@ async function showUpdateSessionDialog(): Promise<void> {
           break;
         }
         await vscode.env.clipboard.writeText(clientApiKey);
-        
+
         if (teamServerUrl) {
           vscode.env.openExternal(vscode.Uri.parse(teamServerUrl));
           vscode.window.showInformationMessage(`API Key copied! Opening team server...`);

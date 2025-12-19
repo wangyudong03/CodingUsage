@@ -2,18 +2,18 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import axios from 'axios';
-import { 
-  logWithTime, 
-  getAppDisplayName, 
-  getTeamServerUrl, 
-  getClientApiKey, 
-  setClientApiKey, 
+import {
+  logWithTime,
+  getAppDisplayName,
+  getTeamServerUrl,
+  getClientApiKey,
+  setClientApiKey,
   setTeamServerUrl,
   isReportingEnabled,
   getLastAccountId,
   setLastAccountId
 } from './utils';
-import { UsageSummaryResponse, BillingCycleResponse, getApiService } from './apiService';
+import { UsageSummaryResponse, BillingCycleResponse, AggregatedUsageResponse, getApiService } from './apiService';
 
 const API_TIMEOUT = 5000;
 const SERVER_LIST_URL = 'https://gist.githubusercontent.com/lasoons/60b1dac84abee807ffe3d1aa0ac60967/raw/coding_usage_config.json';
@@ -105,7 +105,7 @@ export class ServerDiscovery {
   // 自动配置 Team Server URL
   static async autoConfigureIfNeeded(): Promise<void> {
     const currentUrl = getTeamServerUrl();
-    
+
     if (currentUrl) {
       logWithTime(`Team Server URL 已配置: ${currentUrl}`);
       return;
@@ -113,7 +113,7 @@ export class ServerDiscovery {
 
     logWithTime('Team Server URL 未配置，开始自动发现...');
     const discoveredUrl = await this.discoverServer();
-    
+
     if (discoveredUrl) {
       const appName = getAppDisplayName();
       await setTeamServerUrl(discoveredUrl);
@@ -133,33 +133,60 @@ export class TeamServerClient {
   }
 
   // 提交 Cursor 使用数据到团队服务器
-  static async submitCursorUsage(sessionToken: string, summary: UsageSummaryResponse, billing: BillingCycleResponse): Promise<void> {
+  static async submitCursorUsage(
+    sessionToken: string,
+    summary: UsageSummaryResponse,
+    billing: BillingCycleResponse,
+    aggregatedData?: AggregatedUsageResponse | null
+  ): Promise<void> {
     if (!isReportingEnabled()) {
       logWithTime('投递功能未启用，跳过提交');
       return;
     }
     const url = getTeamServerUrl();
     if (!url) return;
-    
+
     try {
       const apiService = getApiService();
       const me = await apiService.fetchCursorUserInfo(sessionToken);
-      
+
       // 检查账号变化并更新 API Key（使用 email 作为账号标识）
       const apiKey = await ApiKeyGenerator.checkAndUpdateApiKey(me.email);
       if (!apiKey) return;
 
       const plan = summary.individualUsage.plan;
+
+      // 从聚合数据计算 API 和 Auto 使用量
+      let apiUsageCents = 0;
+      let autoUsageCents = 0;
+      if (aggregatedData) {
+        for (const event of aggregatedData.aggregations) {
+          if (event.modelIntent === 'default') {
+            autoUsageCents += event.totalCents;
+          } else {
+            apiUsageCents += event.totalCents;
+          }
+        }
+      }
+
+      // 使用百分比反推限额
+      const apiPercentUsed = plan.apiPercentUsed ?? 0;
+      const autoPercentUsed = plan.autoPercentUsed ?? 0;
+      const apiLimitCents = apiPercentUsed > 0 ? (apiUsageCents / apiPercentUsed) * 100 : 0;
+      const autoLimitCents = autoPercentUsed > 0 ? (autoUsageCents / autoPercentUsed) * 100 : 0;
+
       const body = {
         client_token: apiKey,
         email: me.email,
         expire_time: Number(billing.endDateEpochMillis),
         membership_type: summary.membershipType,
-        // API 和 Auto 使用数据
-        api_spend: plan.apiSpend ?? 0,
-        api_limit: plan.apiLimit ?? 0,
-        auto_spend: plan.autoSpend ?? 0,
-        auto_limit: plan.autoLimit ?? 0,
+        // API 和 Auto 使用数据（使用百分比和聚合数据）
+        api_spend: Math.round(apiUsageCents),
+        api_limit: Math.round(apiLimitCents),
+        auto_spend: Math.round(autoUsageCents),
+        auto_limit: Math.round(autoLimitCents),
+        api_percent: apiPercentUsed,
+        auto_percent: autoPercentUsed,
         host: os.hostname(),
         platform: os.platform(),
         app_name: vscode.env.appName
@@ -185,7 +212,7 @@ export class TeamServerClient {
     }
     const url = getTeamServerUrl();
     if (!url) return;
-    
+
     try {
       // 检查账号变化并更新 API Key（使用 user_id/email 作为账号标识）
       const apiKey = await ApiKeyGenerator.checkAndUpdateApiKey(email);
@@ -251,12 +278,12 @@ export class TeamServerClient {
 // ==================== Ping 管理器 ====================
 export class PingManager {
   private interval: NodeJS.Timeout | null = null;
-  
+
   start() {
     this.stop();
     this.interval = setInterval(() => TeamServerClient.ping(), 60000);
   }
-  
+
   stop() {
     if (this.interval) {
       clearInterval(this.interval);

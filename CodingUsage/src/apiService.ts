@@ -12,6 +12,10 @@ export interface UsageSummaryResponse {
   billingCycleStart: string;
   billingCycleEnd: string;
   membershipType: string;
+  limitType?: string;
+  isUnlimited?: boolean;
+  autoModelSelectedDisplayMessage?: string;
+  namedModelSelectedDisplayMessage?: string;
   individualUsage: {
     plan: {
       enabled: boolean;
@@ -23,13 +27,38 @@ export interface UsageSummaryResponse {
         bonus: number;
         total: number;
       };
-      // API 和 Auto 订阅使用统计
-      autoSpend?: number;
-      apiSpend?: number;
-      autoLimit?: number;
-      apiLimit?: number;
+      // 使用百分比（新 API 格式）
+      autoPercentUsed?: number;
+      apiPercentUsed?: number;
+      totalPercentUsed?: number;
+    };
+    onDemand?: {
+      enabled: boolean;
+      used: number;
+      limit: number | null;
+      remaining: number | null;
     };
   };
+  teamUsage?: Record<string, unknown>;
+}
+
+// Cursor 聚合使用事件
+export interface AggregatedUsageEvent {
+  modelIntent: string;
+  inputTokens?: string;
+  outputTokens?: string;
+  cacheWriteTokens?: string;
+  cacheReadTokens?: string;
+  totalCents: number;
+}
+
+export interface AggregatedUsageResponse {
+  aggregations: AggregatedUsageEvent[];
+  totalInputTokens: string;
+  totalOutputTokens: string;
+  totalCacheWriteTokens: string;
+  totalCacheReadTokens: string;
+  totalCostCents: number;
 }
 
 export interface UserInfoResponse {
@@ -132,14 +161,14 @@ const RETRY_DELAY = 1000;
  */
 export class ApiService {
   private static instance: ApiService;
-  
+
   // Trae 专用缓存
   private cachedTraeToken: string | null = null;
   private cachedTraeSessionId: string | null = null;
   private traeHasSwitchedHost: boolean = false;
   private traeCurrentHost: string = TRAE_DEFAULT_HOST;
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): ApiService {
     if (!ApiService.instance) {
@@ -149,7 +178,7 @@ export class ApiService {
   }
 
   // ==================== Cursor API ====================
-  
+
   /**
    * 创建 Cursor 请求头
    */
@@ -188,6 +217,41 @@ export class ApiService {
         timeout: API_TIMEOUT
       }
     );
+    return response.data;
+  }
+
+  /**
+   * 获取 Cursor 当前账单周期
+   */
+  public async fetchCursorBillingCycle(sessionToken: string): Promise<BillingCycleResponse> {
+    const response = await axios.post<BillingCycleResponse>(
+      `${CURSOR_API_BASE_URL}/dashboard/get-current-billing-cycle`,
+      {},
+      {
+        headers: this.createCursorHeaders(sessionToken),
+        timeout: API_TIMEOUT
+      }
+    );
+    logWithTime('获取 Cursor 账单周期成功');
+    return response.data;
+  }
+
+  /**
+   * 获取 Cursor 聚合使用事件
+   */
+  public async fetchCursorAggregatedUsage(sessionToken: string, startDateEpochMillis: number): Promise<AggregatedUsageResponse> {
+    const response = await axios.post<AggregatedUsageResponse>(
+      `${CURSOR_API_BASE_URL}/dashboard/get-aggregated-usage-events`,
+      {
+        teamId: -1,
+        startDate: startDateEpochMillis
+      },
+      {
+        headers: this.createCursorHeaders(sessionToken),
+        timeout: API_TIMEOUT
+      }
+    );
+    logWithTime('获取 Cursor 聚合使用数据成功');
     return response.data;
   }
 
@@ -300,7 +364,7 @@ export class ApiService {
     try {
       // 如果没有提供 sessionId，尝试从缓存或配置中获取
       let currentSessionId = sessionId || this.cachedTraeSessionId;
-      
+
       // 如果缓存中没有，尝试从全局配置获取
       if (!currentSessionId) {
         const { getSessionToken } = await import('./utils');
