@@ -123,6 +123,17 @@ export function formatTimestamp(timestamp: number, isSeconds: boolean = false): 
   });
 }
 
+// 格式化时间戳（不显示年份，格式：MM/DD HH:mm）
+export function formatTimeWithoutYear(timestamp: number, isSeconds: boolean = false): string {
+  const ms = isSeconds ? timestamp * 1000 : timestamp;
+  const date = new Date(ms);
+  const mm = (date.getMonth() + 1).toString().padStart(2, '0');
+  const dd = date.getDate().toString().padStart(2, '0');
+  const hh = date.getHours().toString().padStart(2, '0');
+  const min = date.getMinutes().toString().padStart(2, '0');
+  return `${mm}/${dd} ${hh}:${min}`;
+}
+
 export function formatTokensInMillions(tokens: number): string {
   return `${(tokens / 1000000).toFixed(2)}M`;
 }

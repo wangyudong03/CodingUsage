@@ -11,6 +11,7 @@ import {
   getOutputChannel,
   logWithTime,
   formatTimestamp,
+  formatTimeWithoutYear,
   getSessionToken,
   setSessionToken,
   isRetryableError,
@@ -388,7 +389,9 @@ export class CodingUsageProvider {
     const membershipType = summary.membershipType.toUpperCase();
     const label = CodingUsageProvider.getCursorSubscriptionTypeLabel(membershipType);
     const plan = summary.individualUsage.plan;
-    const expireTime = formatTimestamp(Number(billing.endDateEpochMillis));
+    const startTime = formatTimeWithoutYear(Number(billing.startDateEpochMillis));
+    const endTime = formatTimeWithoutYear(Number(billing.endDateEpochMillis));
+    const billingPeriod = `${startTime}-${endTime}`;
 
     const md = new vscode.MarkdownString();
     md.supportHtml = true;
@@ -405,13 +408,22 @@ export class CodingUsageProvider {
     const apiLimitCents = apiPercentUsed > 0 ? (apiUsageCents / apiPercentUsed) * 100 : 0;
     const autoLimitCents = autoPercentUsed > 0 ? (autoUsageCents / autoPercentUsed) * 100 : 0;
 
+    // 构建第一行：标签 + 账单周期 + 连接状态 + 更新时间
+    const hintText = TeamServerClient.isTeamHintActive() ? "✅Connect " : "";
+    const now = currentTime || new Date();
+    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+    const dd = now.getDate().toString().padStart(2, '0');
+    const hh = now.getHours().toString().padStart(2, '0');
+    const min = now.getMinutes().toString().padStart(2, '0');
+    const updateTime = `🕐${mm}/${dd} ${hh}:${min}`;
+
     // API 使用进度
     if (apiPercentUsed > 0) {
       const apiUsageDollars = apiUsageCents / 100;
       const apiLimitDollars = apiLimitCents / 100;
       const apiProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(apiPercentUsed);
 
-      md.appendMarkdown(`${label}  Expire: ${expireTime}\n\n`);
+      md.appendMarkdown(`${label}  📅${billingPeriod}\u00A0\u00A0${hintText}${updateTime}\n\n`);
       md.appendMarkdown(`API ($${apiUsageDollars.toFixed(2)}/${apiLimitDollars.toFixed(0)}) \u00A0\u00A0\u00A0[${apiProgressInfo.progressBar}] ${apiPercentUsed.toFixed(1)}%\n`);
     }
 
@@ -431,7 +443,7 @@ export class CodingUsageProvider {
       const limitDollars = plan.limit / 100;
       const progressInfo = CodingUsageProvider.buildProgressBar(usedDollars, limitDollars);
 
-      md.appendMarkdown(`${label} ($${usedDollars.toFixed(2)}/${limitDollars.toFixed(0)})  Expire: ${expireTime}\n`);
+      md.appendMarkdown(`${label} ($${usedDollars.toFixed(2)}/${limitDollars.toFixed(0)})  📅${billingPeriod}\u00A0\u00A0${hintText}${updateTime}\n`);
       md.appendMarkdown(`[${progressInfo.progressBar}] ${totalPercentUsed.toFixed(1)}%\n`);
     }
 
@@ -448,29 +460,51 @@ export class CodingUsageProvider {
     }
 
     // Token 使用统计（放在最后）
-    if (aggregatedData) {
+    if (aggregatedData && aggregatedData.aggregations && aggregatedData.aggregations.length > 0) {
+      // 构建各模型的使用量明细表格
+      const headers = ['Model', 'In', 'Out', 'Write', 'Read', 'Cost'];
+      const rows: string[][] = [];
+
+      // 按 Cost 降序排序模型
+      const sortedAggregations = [...aggregatedData.aggregations].sort((a, b) => b.totalCents - a.totalCents);
+
+      for (const agg of sortedAggregations) {
+        const modelName = CodingUsageProvider.shortenModelName(agg.modelIntent);
+        const inputTokens = parseInt(agg.inputTokens || '0');
+        const outputTokens = parseInt(agg.outputTokens || '0');
+        const cacheWriteTokens = parseInt(agg.cacheWriteTokens || '0');
+        const cacheReadTokens = parseInt(agg.cacheReadTokens || '0');
+        const costDollars = agg.totalCents / 100;
+
+        rows.push([
+          modelName,
+          CodingUsageProvider.formatTokenCount(inputTokens),
+          CodingUsageProvider.formatTokenCount(outputTokens),
+          CodingUsageProvider.formatTokenCount(cacheWriteTokens),
+          CodingUsageProvider.formatTokenCount(cacheReadTokens),
+          `$${costDollars.toFixed(2)}`
+        ]);
+      }
+
+      // 添加合计行
       const totalInput = parseInt(aggregatedData.totalInputTokens || '0');
       const totalOutput = parseInt(aggregatedData.totalOutputTokens || '0');
       const totalCacheWrite = parseInt(aggregatedData.totalCacheWriteTokens || '0');
       const totalCacheRead = parseInt(aggregatedData.totalCacheReadTokens || '0');
+      const totalCost = aggregatedData.totalCostCents / 100;
 
-      const headers = ['In', 'Out', 'Write', 'Read'];
-      const values = [
+      rows.push([
+        'Total',
         CodingUsageProvider.formatTokenCount(totalInput),
         CodingUsageProvider.formatTokenCount(totalOutput),
         CodingUsageProvider.formatTokenCount(totalCacheWrite),
-        CodingUsageProvider.formatTokenCount(totalCacheRead)
-      ];
+        CodingUsageProvider.formatTokenCount(totalCacheRead),
+        `$${totalCost.toFixed(2)}`
+      ]);
 
       md.appendMarkdown('\n');
-      md.appendCodeblock(CodingUsageProvider.generateAsciiTable(headers, values), 'text');
+      md.appendCodeblock(CodingUsageProvider.generateMultiRowAsciiTable(headers, rows), 'text');
     }
-
-    const hintText = TeamServerClient.isTeamHintActive() ? "✅Connected" : undefined;
-    md.appendMarkdown('\n');
-    const timeSection = CodingUsageProvider.buildTimeSection(currentTime, hintText);
-    // Replace multiple spaces with unicode non-breaking spaces (\u00A0) to preserve alignment
-    md.appendMarkdown(timeSection.replace(/ {2,}/g, (match) => '\u00A0'.repeat(match.length)));
 
     return md;
   }
@@ -506,6 +540,75 @@ export class CodingUsageProvider {
       bottom
     ].join('\n');
   }
+
+  /**
+   * 生成多行 ASCII 表格
+   */
+  private static generateMultiRowAsciiTable(headers: string[], rows: string[][]): string {
+    // 计算每列的最大宽度
+    const colWidths = headers.map((header, colIndex) => {
+      const maxRowWidth = Math.max(...rows.map(row => (row[colIndex] || '').length));
+      return Math.max(header.length, maxRowWidth) + 2;
+    });
+
+    const buildRow = (items: string[]) => {
+      return '│' + items.map((item, i) => {
+        const padding = colWidths[i] - item.length;
+        const leftPad = Math.floor(padding / 2);
+        const rightPad = padding - leftPad;
+        return ' '.repeat(leftPad) + item + ' '.repeat(rightPad);
+      }).join('│') + '│';
+    };
+
+    const buildSeparator = (start: string, mid: string, end: string, line: string) => {
+      return start + colWidths.map(w => line.repeat(w)).join(mid) + end;
+    };
+
+    const top = buildSeparator('┌', '┬', '┐', '─');
+    const headerSep = buildSeparator('├', '┼', '┤', '─');
+    const bottom = buildSeparator('└', '┴', '┘', '─');
+
+    const result = [top, buildRow(headers), headerSep];
+    rows.forEach(row => {
+      result.push(buildRow(row));
+    });
+    result.push(bottom);
+
+    return result.join('\n');
+  }
+
+  /**
+   * 简化模型名称显示
+   */
+  public static shortenModelName(modelIntent: string): string {
+    // 简化常见模型名称
+    const mappings: Record<string, string> = {
+      'claude-4.5-opus-high-thinking': 'opus-4.5',
+      'claude-4.5-sonnet-thinking': 'sonnet-4.5',
+      'claude-4-opus-thinking': 'opus-4',
+      'claude-4-sonnet-thinking': 'sonnet-4',
+      'claude-3.5-sonnet': 'sonnet-3.5',
+      'claude-3-5-sonnet': 'sonnet-3.5',
+      'claude-3-opus': 'opus-3',
+      'gpt-5.2': 'gpt-5.2',
+      'gpt-4-turbo': 'gpt-4t',
+      'gpt-4o': 'gpt-4o',
+      'gpt-4o-mini': 'gpt-4o-m',
+      'default': 'auto'
+    };
+
+    if (mappings[modelIntent]) {
+      return mappings[modelIntent];
+    }
+
+    // 如果名称太长，进行截断
+    if (modelIntent.length > 12) {
+      return modelIntent.substring(0, 10) + '..';
+    }
+
+    return modelIntent;
+  }
+
 
   /**
    * 静态方法：从聚合数据计算使用量
@@ -545,7 +648,7 @@ export class CodingUsageProvider {
    * 根据百分比构建进度条
    */
   public static buildProgressBarFromPercent(percent: number): { progressBar: string; percentage: number } {
-    const progressBarLength = 15;
+    const progressBarLength = 30;
     const filledLength = Math.round((percent / 100) * progressBarLength);
     const clampedFilled = Math.max(0, Math.min(filledLength, progressBarLength));
     const progressBar = '█'.repeat(clampedFilled) + '░'.repeat(progressBarLength - clampedFilled);
@@ -616,7 +719,7 @@ export class CodingUsageProvider {
 
       if (fastLimit > 0) {
         const progressInfo = CodingUsageProvider.buildProgressBar(fastUsed, fastLimit);
-        const header = `${subscriptionType} (${fastUsed}/${fastLimit})  Expire: ${formatTimestamp(entitlement_base_info.end_time, true)}`;
+        const header = `${subscriptionType} (${fastUsed}/${fastLimit})  Reset: ${formatTimeWithoutYear(entitlement_base_info.end_time, true)}`;
         sections.push(header);
         sections.push(`[${progressInfo.progressBar}] ${progressInfo.percentage}%`);
 
@@ -671,7 +774,7 @@ export class CodingUsageProvider {
     const dd = now.getDate().toString().padStart(2, '0');
     const hh = now.getHours().toString().padStart(2, '0');
     const min = now.getMinutes().toString().padStart(2, '0');
-    const updateTime = `🕐 ${mm}/${dd} ${hh}:${min}`;
+    const updateTime = `🕐${mm}/${dd} ${hh}:${min}`;
     const left = leftText ? `${leftText}` : '';
     const spaceCount = left.includes('Connected') ? 25 : 45;
     return `${left}${' '.repeat(spaceCount)}${updateTime}`;
