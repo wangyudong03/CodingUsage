@@ -21,7 +21,7 @@ Currently supports [Cursor](cursor:extension/whyuds.coding-usage), [Trae Interna
 <div align="left">
   <img src="https://raw.githubusercontent.com/lasoons/CodingUsage/refs/heads/main/CodingUsage/img/standalone.gif" alt="Basic Configuration Demo" width="600" style="display: inline-block; flex-shrink: 0;">
 </div>
-<p align="left"><em>Basic Configuration Demo</em></p>
+<p align="left"><em>Additional account configuration; no configuration needed for IDE login account</em></p>
 
 ## Features
 

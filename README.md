@@ -21,7 +21,7 @@
 <div align="left">
   <img src="https://raw.githubusercontent.com/lasoons/CodingUsage/refs/heads/main/CodingUsage/img/standalone.gif" alt="基础配置演示" width="600" style="display: inline-block; flex-shrink: 0;">
 </div>
-<p align="left"><em>基础配置演示</em></p>
+<p align="left"><em>附加账号配置，IDE登录账号无需配置</em></p>
 
 ## 功能特性
 
