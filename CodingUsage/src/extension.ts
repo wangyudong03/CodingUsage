@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as os from 'os';
-import * as cp from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as crypto from 'crypto';
@@ -12,8 +11,7 @@ import {
   logWithTime,
   formatTimestamp,
   formatTimeWithoutYear,
-  getSessionToken,
-  setSessionToken,
+  getAdditionalSessionTokens,
   isRetryableError,
   getAppType,
   getAppDisplayName,
@@ -23,11 +21,8 @@ import {
   getTeamServerUrl,
   getClipboardTokenPattern,
   getDbMonitorKey,
-  getBrowserExtensionUrl,
   getDashboardUrl,
-  BrowserType,
-  isReportingEnabled,
-  setLastAccountId
+  isReportingEnabled
 } from './utils';
 import {
   getApiService,
@@ -47,49 +42,118 @@ const MAX_RETRY_COUNT = 3;
 const RETRY_DELAY = 1000;
 const FETCH_TIMEOUT = 30000; // 30秒超时
 
-// ==================== 浏览器检测 ====================
-async function detectDefaultBrowser(): Promise<BrowserType> {
+// ==================== Token 自动检测 ====================
+function getGlobalStorageDbPath(): string {
   const platform = os.platform();
+  const homeDir = os.homedir();
+  const appFolderName = APP_TYPE === 'trae' ? 'Trae' : 'Cursor';
 
-  try {
-    const command = getBrowserDetectionCommand(platform);
-    if (!command) return 'unknown';
-
-    return new Promise((resolve) => {
-      cp.exec(command, (error, stdout) => {
-        if (error) {
-          logWithTime(`检测浏览器失败: ${error.message}`);
-          resolve('unknown');
-          return;
-        }
-
-        const browserType = parseBrowserOutput(stdout.toLowerCase());
-        resolve(browserType);
-      });
-    });
-  } catch (error) {
-    logWithTime(`检测浏览器异常: ${error}`);
-    return 'unknown';
-  }
-}
-
-function getBrowserDetectionCommand(platform: string): string | null {
   switch (platform) {
-    case 'win32':
-      return 'reg query "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice" /v ProgId';
+    case 'win32': {
+      const appData = process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
+      return path.join(appData, appFolderName, 'User', 'globalStorage', 'state.vscdb');
+    }
     case 'darwin':
-      return 'defaults read com.apple.LaunchServices/com.apple.launchservices.secure LSHandlers | grep -A 2 -B 2 "LSHandlerURLScheme.*http"';
-    case 'linux':
-      return 'xdg-settings get default-web-browser';
+      return path.join(homeDir, 'Library', 'Application Support', appFolderName, 'User', 'globalStorage', 'state.vscdb');
     default:
-      return null;
+      return path.join(homeDir, '.config', appFolderName, 'User', 'globalStorage', 'state.vscdb');
   }
 }
 
-function parseBrowserOutput(output: string): BrowserType {
-  if (output.includes('chrome')) return 'chrome';
-  if (output.includes('edge') || output.includes('msedge')) return 'edge';
-  return 'unknown';
+async function readAccessTokenFromDb(context: vscode.ExtensionContext): Promise<string | null> {
+  try {
+    const wasmPath = vscode.Uri.joinPath(context.extensionUri, 'out', 'sql-wasm.wasm').fsPath;
+    const dbPath = getGlobalStorageDbPath();
+
+    if (!await fs.pathExists(dbPath)) {
+      logWithTime(`数据库文件不存在: ${dbPath}`);
+      return null;
+    }
+
+    const SQL = await initSqlJs({ locateFile: () => wasmPath });
+    const fileBuffer = await fs.readFile(dbPath);
+    const db = new SQL.Database(fileBuffer);
+    const res = db.exec(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken';`);
+    db.close();
+
+    if (res && res.length > 0 && res[0].values && res[0].values.length > 0) {
+      const val = res[0].values[0][0];
+      return typeof val === 'string' ? val : null;
+    }
+    return null;
+  } catch (error) {
+    logWithTime(`读取 accessToken 失败: ${error}`);
+    return null;
+  }
+}
+
+function constructSessionToken(accessToken: string): string | null {
+  try {
+    // JWT 格式: header.payload.signature
+    const parts = accessToken.split('.');
+    if (parts.length !== 3) {
+      logWithTime('accessToken 不是有效的 JWT 格式');
+      return null;
+    }
+
+    // 解码 payload (Base64)
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
+
+    // sub 格式: auth0|user_01K8VZM8H7ACG6AXT48FTT5089
+    const sub = payload.sub;
+    if (!sub || !sub.includes('|')) {
+      logWithTime(`JWT sub 字段格式不正确: ${sub}`);
+      return null;
+    }
+
+    // 提取 user_XXXXX 部分
+    const userId = sub.split('|')[1];
+
+    // 构造 session token: user_ID::JWT_TOKEN (URL 编码 :: 为 %3A%3A)
+    return `${userId}%3A%3A${accessToken}`;
+  } catch (error) {
+    logWithTime(`解析 JWT 失败: ${error}`);
+    return null;
+  }
+}
+
+async function readCachedEmailFromDb(context: vscode.ExtensionContext): Promise<string | null> {
+  try {
+    const wasmPath = vscode.Uri.joinPath(context.extensionUri, 'out', 'sql-wasm.wasm').fsPath;
+    const dbPath = getGlobalStorageDbPath();
+
+    if (!await fs.pathExists(dbPath)) {
+      return null;
+    }
+
+    const SQL = await initSqlJs({ locateFile: () => wasmPath });
+    const fileBuffer = await fs.readFile(dbPath);
+    const db = new SQL.Database(fileBuffer);
+    const res = db.exec(`SELECT value FROM ItemTable WHERE key = 'cursorAuth/cachedEmail';`);
+    db.close();
+
+    if (res && res.length > 0 && res[0].values && res[0].values.length > 0) {
+      const val = res[0].values[0][0];
+      return typeof val === 'string' ? val : null;
+    }
+    return null;
+  } catch (error) {
+    logWithTime(`读取 cachedEmail 失败: ${error}`);
+    return null;
+  }
+}
+
+async function getPrimarySessionToken(context: vscode.ExtensionContext): Promise<string | null> {
+  if (APP_TYPE !== 'cursor') {
+    return null;
+  }
+
+  const accessToken = await readAccessTokenFromDb(context);
+  if (!accessToken) {
+    return null;
+  }
+
+  return constructSessionToken(accessToken);
 }
 
 // ==================== Trae 使用量统计类型 ====================
@@ -99,12 +163,21 @@ interface TraeUsageStats {
   hasValidPacks: boolean;
 }
 
+// 副账号数据接口
+interface SecondaryAccountData {
+  summary: UsageSummaryResponse;
+  billingCycle: BillingCycleResponse | null;
+  aggregatedData: AggregatedUsageResponse | null;
+}
+
 // ==================== 主类 ====================
 export class CodingUsageProvider {
   private billingCycleData: BillingCycleResponse | null = null;
   private summaryData: UsageSummaryResponse | null = null;
   private aggregatedUsageData: AggregatedUsageResponse | null = null;
   private traeUsageData: TraeApiResponse | null = null;
+  private secondaryAccountsData: Map<string, SecondaryAccountData> = new Map();
+  private primaryEmail: string | null = null;
   private retryTimer: NodeJS.Timeout | null = null;
   private clickTimer: NodeJS.Timeout | null = null;
   private fetchTimeoutTimer: NodeJS.Timeout | null = null;
@@ -133,9 +206,8 @@ export class CodingUsageProvider {
   }
 
   private initialize(): void {
-    const sessionToken = getSessionToken();
-
-    if (sessionToken) {
+    // 主账号从 DB 实时获取，无需检查配置
+    if (APP_TYPE === 'cursor') {
       this.isRefreshing = true;
       this.setLoadingState();
     } else {
@@ -219,12 +291,6 @@ export class CodingUsageProvider {
 
     if (this.isAuthFailed) {
       this.showAuthFailedStatus();
-      return;
-    }
-
-    const sessionToken = getSessionToken();
-    if (!sessionToken) {
-      this.showNotConfiguredStatus();
       return;
     }
 
@@ -372,6 +438,8 @@ export class CodingUsageProvider {
       this.summaryData,
       this.billingCycleData,
       this.aggregatedUsageData,
+      this.secondaryAccountsData,
+      this.primaryEmail,
       new Date()
     );
   }
@@ -380,10 +448,12 @@ export class CodingUsageProvider {
     summary: UsageSummaryResponse | null,
     billing: BillingCycleResponse | null,
     aggregatedData: AggregatedUsageResponse | null,
+    secondaryAccounts?: Map<string, SecondaryAccountData>,
+    primaryEmail?: string | null,
     currentTime?: Date
   ): vscode.MarkdownString {
     if (!summary || !billing) {
-      return new vscode.MarkdownString('Click to configure session token\n\nSingle click: Refresh\nDouble click: Configure');
+      return new vscode.MarkdownString('Primary account not detected. Please ensure you are logged in to Cursor.\n\nSingle click: Refresh\nDouble click: Settings');
     }
 
     const membershipType = summary.membershipType.toUpperCase();
@@ -395,6 +465,7 @@ export class CodingUsageProvider {
 
     const md = new vscode.MarkdownString();
     md.supportHtml = true;
+    md.isTrusted = true;
 
     // 从聚合数据计算使用量
     const { apiUsageCents, autoUsageCents } = CodingUsageProvider.calculateUsageFromAggregatedStatic(aggregatedData);
@@ -505,6 +576,94 @@ export class CodingUsageProvider {
       md.appendMarkdown('\n');
       md.appendCodeblock(CodingUsageProvider.generateMultiRowAsciiTable(headers, rows), 'text');
     }
+
+    // 显示副账号使用量（样式与主账号一致）
+    if (secondaryAccounts && secondaryAccounts.size > 0) {
+      md.appendMarkdown('\n---\n');
+      md.appendMarkdown('**Additional Accounts**\n\n');
+
+      secondaryAccounts.forEach((accData, email) => {
+        const accSummary = accData.summary;
+        const accBilling = accData.billingCycle;
+        const accAggregated = accData.aggregatedData;
+        const accPlan = accSummary.individualUsage.plan;
+        const shortEmail = email.length > 25 ? email.substring(0, 22) + '...' : email;
+        const accMembership = accSummary.membershipType.toUpperCase();
+        const accLabel = CodingUsageProvider.getCursorSubscriptionTypeLabel(accMembership);
+
+        // 账单周期
+        let billingPeriod = '';
+        if (accBilling) {
+          const startTime = formatTimeWithoutYear(Number(accBilling.startDateEpochMillis));
+          const endTime = formatTimeWithoutYear(Number(accBilling.endDateEpochMillis));
+          billingPeriod = ` 📅${startTime}-${endTime}`;
+        }
+
+        // 获取百分比
+        const apiPercent = accPlan.apiPercentUsed ?? 0;
+        const autoPercent = accPlan.autoPercentUsed ?? 0;
+        const totalPercent = accPlan.totalPercentUsed ?? 0;
+
+        // 从聚合数据计算使用量（与主账号完全一致）
+        let apiUsedCents = 0;
+        let autoUsedCents = 0;
+        if (accAggregated && accAggregated.aggregations) {
+          for (const event of accAggregated.aggregations) {
+            if (event.modelIntent === 'default') {
+              autoUsedCents += event.totalCents;
+            } else {
+              apiUsedCents += event.totalCents;
+            }
+          }
+        }
+
+        // 反推限额（与主账号完全一致的公式）
+        const apiLimitCents = apiPercent > 0 ? (apiUsedCents / apiPercent) * 100 : 0;
+        const autoLimitCents = autoPercent > 0 ? (autoUsedCents / autoPercent) * 100 : 0;
+
+        md.appendMarkdown(`**${shortEmail}** (${accLabel})${billingPeriod}\n\n`);
+
+        // API 使用进度
+        if (apiPercent > 0) {
+          const apiUsageDollars = apiUsedCents / 100;
+          const apiLimitDollars = apiLimitCents / 100;
+          const apiProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(apiPercent);
+          md.appendMarkdown(`API ($${apiUsageDollars.toFixed(2)}/${apiLimitDollars.toFixed(0)}) \u00A0\u00A0\u00A0[${apiProgressInfo.progressBar}] ${apiPercent.toFixed(1)}%\n\n`);
+        }
+
+        // Auto 使用进度
+        if (autoPercent > 0) {
+          const autoUsageDollars = autoUsedCents / 100;
+          const autoLimitDollars = autoLimitCents / 100;
+          const autoProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(autoPercent);
+          md.appendMarkdown(`Auto($${autoUsageDollars.toFixed(2)}/${autoLimitDollars.toFixed(0)}) [${autoProgressInfo.progressBar}] ${autoPercent.toFixed(1)}%\n\n`);
+        }
+
+        // 如果没有 API/Auto，显示总体进度
+        if (apiPercent === 0 && autoPercent === 0 && totalPercent > 0) {
+          const totalUsedCents = accPlan.breakdown?.total ?? accPlan.used ?? 0;
+          const totalLimitCents = accPlan.limit ?? 0;
+          const usedDollars = totalUsedCents / 100;
+          const limitDollars = totalLimitCents / 100;
+          const totalProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(totalPercent);
+          md.appendMarkdown(`Total ($${usedDollars.toFixed(2)}/${limitDollars.toFixed(0)}) [${totalProgressInfo.progressBar}] ${totalPercent.toFixed(1)}%\n\n`);
+        }
+
+        // OnDemand 进度条
+        const onDemand = accSummary.individualUsage.onDemand;
+        if (onDemand && onDemand.enabled && onDemand.limit !== null) {
+          const odmUsedDollars = onDemand.used / 100;
+          const odmLimitDollars = onDemand.limit / 100;
+          const odmPercent = onDemand.limit > 0 ? (onDemand.used / onDemand.limit) * 100 : 0;
+          const odmProgressInfo = CodingUsageProvider.buildProgressBarFromPercent(odmPercent);
+          md.appendMarkdown(`ODM ($${odmUsedDollars.toFixed(2)}/${odmLimitDollars.toFixed(0)}) [${odmProgressInfo.progressBar}] ${odmPercent.toFixed(1)}%\n\n`);
+        }
+      });
+    }
+
+    // 添加底部交互链接（实现 Sticky Hover）
+    md.appendMarkdown('\n---\n');
+    md.appendMarkdown('[Refresh](command:cursorUsage.refresh) \u00A0\u00A0 [Settings](command:cursorUsage.updateSession)');
 
     return md;
   }
@@ -668,13 +827,17 @@ export class CodingUsageProvider {
   }
 
   // ==================== Trae Tooltip 构建 ====================
-  private buildTraeDetailedTooltip(): string {
+  private buildTraeDetailedTooltip(): vscode.MarkdownString {
     return CodingUsageProvider.buildTraeTooltipFromData(this.traeUsageData, new Date());
   }
 
-  public static buildTraeTooltipFromData(usageData: TraeApiResponse | null, currentTime?: Date): string {
+  public static buildTraeTooltipFromData(usageData: TraeApiResponse | null, currentTime?: Date): vscode.MarkdownString {
+    const md = new vscode.MarkdownString();
+    md.isTrusted = true;
+
     if (!usageData || usageData.code === 1001) {
-      return 'Click to configure Session ID\n\nSingle click: Refresh\nDouble click: Configure';
+      md.appendMarkdown('Click to configure Session ID\n\nSingle click: Refresh\nDouble click: Configure');
+      return md;
     }
 
     const sections: string[] = [];
@@ -691,7 +854,13 @@ export class CodingUsageProvider {
     sections.push('');
     sections.push(CodingUsageProvider.buildTimeSection(currentTime, hintText));
 
-    return sections.join('\n');
+    md.appendMarkdown(sections.join('\n'));
+
+    // 添加底部交互链接（实现 Sticky Hover）
+    md.appendMarkdown('\n---\n');
+    md.appendMarkdown('[Refresh](command:cursorUsage.refresh) \u00A0\u00A0 [Settings](command:cursorUsage.updateSession)');
+
+    return md;
   }
 
   public static getTraeValidPacks(packList: TraeEntitlementPack[]): TraeEntitlementPack[] {
@@ -796,20 +965,39 @@ export class CodingUsageProvider {
     }, FETCH_TIMEOUT);
 
     try {
-      const sessionToken = getSessionToken();
-      if (!sessionToken) {
-        logWithTime('没有配置 session token');
+      if (APP_TYPE === 'cursor') {
+        // 主账号：从 DB 实时获取 session token
+        const primaryToken = await getPrimarySessionToken(this.context);
+        if (!primaryToken) {
+          logWithTime('无法从 DB 获取主账号 token，请确保已登录 Cursor');
+          this.handleNoSessionToken();
+          return;
+        }
+
+        // 获取主账号邮箱
+        this.primaryEmail = await readCachedEmailFromDb(this.context);
+        logWithTime(`主账号邮箱: ${this.primaryEmail}`);
+
+        // 获取主账号数据（带投递）
+        await this.fetchCursorData(primaryToken);
+
+        // 获取副账号数据（不投递，仅显示使用量）
+        await this.fetchSecondaryAccountsData();
+
+      } else if (APP_TYPE === 'trae') {
+        // Trae 暂不支持多账号，使用第一个副账号配置
+        const additionalTokens = getAdditionalSessionTokens();
+        if (additionalTokens.length > 0) {
+          await this.fetchTraeData(additionalTokens[0]);
+        } else {
+          logWithTime('Trae 需要在设置中配置 Session Token');
+          this.handleNoSessionToken();
+          return;
+        }
+      } else {
+        // 未知应用类型
         this.handleNoSessionToken();
         return;
-      }
-
-      if (APP_TYPE === 'cursor') {
-        await this.fetchCursorData(sessionToken);
-      } else if (APP_TYPE === 'trae') {
-        await this.fetchTraeData(sessionToken);
-      } else {
-        // 未知应用类型，尝试 Cursor
-        await this.fetchCursorData(sessionToken);
       }
 
       this.clearFetchTimeout();
@@ -819,6 +1007,44 @@ export class CodingUsageProvider {
       logWithTime(`fetchData 发生错误: ${error}`);
       this.clearFetchTimeout();
       this.handleFetchError(error, retryCount);
+    }
+  }
+
+  /**
+   * 获取副账号数据（不投递，仅显示使用量）
+   */
+  private async fetchSecondaryAccountsData(): Promise<void> {
+    const additionalTokens = getAdditionalSessionTokens();
+    this.secondaryAccountsData.clear();
+
+    for (let i = 0; i < additionalTokens.length; i++) {
+      const token = additionalTokens[i];
+      try {
+        // 获取用户信息来获取邮箱
+        const userInfo = await this.apiService.fetchCursorUserInfo(token);
+        const email = userInfo.email || `Account ${i + 2}`;
+
+        // 获取 UsageSummary
+        const summary = await this.apiService.fetchCursorUsageSummary(token);
+
+        // 获取账单周期和聚合数据（与主账号一致）
+        let billingCycle: BillingCycleResponse | null = null;
+        let aggregatedData: AggregatedUsageResponse | null = null;
+        try {
+          billingCycle = await this.apiService.fetchCursorBillingCycle(token);
+          const billingStartMillis = parseInt(billingCycle.startDateEpochMillis);
+          aggregatedData = await this.apiService.fetchCursorAggregatedUsage(token, billingStartMillis);
+          logWithTime(`获取副账号 ${email} 聚合数据成功: ${aggregatedData.aggregations.length} 条记录`);
+        } catch (aggError) {
+          logWithTime(`获取副账号 ${email} 聚合数据失败（非致命）: ${aggError}`);
+        }
+
+        this.secondaryAccountsData.set(email, { summary, billingCycle, aggregatedData });
+        logWithTime(`获取副账号 ${email} 数据成功`);
+      } catch (error) {
+        logWithTime(`获取副账号数据失败: ${error}`);
+        // 副账号失败不影响主流程
+      }
     }
   }
 
@@ -1154,7 +1380,6 @@ class DbMonitor {
 // ==================== 剪贴板监控 ====================
 class ClipboardMonitor {
   private lastNotifiedToken: string | null = null;
-  private lastNotifiedConfig: string | null = null;
 
   async checkForToken(): Promise<void> {
     try {
@@ -1170,82 +1395,47 @@ class ClipboardMonitor {
   }
 
   private async handleTokenDetected(token: string): Promise<void> {
-    const currentToken = getSessionToken();
+    // 检查是否已在副账号列表中
+    const existingTokens = getAdditionalSessionTokens();
+    if (existingTokens.includes(token)) {
+      if (this.lastNotifiedToken !== token) {
+        vscode.window.showInformationMessage(`Session token already in additional accounts.`);
+        this.lastNotifiedToken = token;
+      }
+      return;
+    }
 
-    if (token !== currentToken) {
-      await this.promptUpdateToken(token);
-      this.lastNotifiedToken = null;
-    } else if (this.lastNotifiedToken !== token) {
-      vscode.window.showInformationMessage(`Session token already configured.`);
-      this.lastNotifiedToken = token;
+    if (this.lastNotifiedToken !== token) {
+      await this.promptAddToken(token);
     }
   }
 
-  private async promptUpdateToken(token: string): Promise<void> {
+  private async promptAddToken(token: string): Promise<void> {
+    const message = APP_TYPE === 'cursor'
+      ? 'Found session token in clipboard. Add as additional account?'
+      : 'Found session token in clipboard. Update Trae configuration?';
+
     const choice = await vscode.window.showInformationMessage(
-      `Found session token in clipboard. Update configuration?`,
-      'Update',
+      message,
+      'Add',
       'Cancel'
     );
 
-    if (choice === 'Update') {
-      await setSessionToken(token);
-
-      // Trae 需要重置主机
-      if (APP_TYPE === 'trae') {
-        await getApiService().resetTraeToDefaultHost();
-      }
-
-      // 立即获取账号信息并更新 Last Account ID 和 API Key
-      await this.updateAccountInfoAndApiKey();
-
-      vscode.window.showInformationMessage('Session token updated automatically.');
-      vscode.commands.executeCommand('cursorUsage.refresh');
-    }
-  }
-
-  private async updateAccountInfoAndApiKey(): Promise<void> {
-    try {
-      const sessionToken = getSessionToken();
-      if (!sessionToken) {
-        logWithTime('Session token 不存在，跳过账号信息更新');
+    if (choice === 'Add') {
+      const existingTokens = getAdditionalSessionTokens();
+      if (existingTokens.length >= 3) {
+        vscode.window.showWarningMessage('Maximum 3 additional accounts allowed. Please remove one first.');
         return;
       }
 
-      const apiService = getApiService();
-      let accountInfo: string | null = null;
+      // 添加到副账号列表
+      const newTokens = [...existingTokens, token];
+      await getConfig().update('additionalSessionTokens', newTokens, vscode.ConfigurationTarget.Global);
 
-      if (APP_TYPE === 'cursor') {
-        // Cursor 获取邮箱信息
-        const me = await apiService.fetchCursorUserInfo(sessionToken);
-        accountInfo = me.email;
-        logWithTime(`获取到 Cursor 账号信息: ${accountInfo}`);
-      } else if (APP_TYPE === 'trae') {
-        // Trae 获取用户ID信息（传递sessionToken）
-        const traeMe = await apiService.fetchTraeUserInfo(sessionToken);
-        accountInfo = traeMe.userId;
-        logWithTime(`获取到 Trae 账号信息: ${accountInfo}`);
-      }
-
-      if (accountInfo) {
-        // 更新 Last Account ID
-        await setLastAccountId(accountInfo);
-        logWithTime(`Last Account ID 已更新: ${accountInfo}`);
-
-        // 生成新的 API Key
-        const newApiKey = ApiKeyGenerator.generateApiKey(accountInfo);
-        await setClientApiKey(newApiKey);
-        logWithTime(`API Key 已生成: ${newApiKey.substring(0, 11)}...`);
-      } else {
-        logWithTime('无法获取账号信息，跳过更新');
-      }
-    } catch (error) {
-      logWithTime(`更新账号信息时出错: ${error}`);
+      this.lastNotifiedToken = token;
+      vscode.window.showInformationMessage('Session token added to additional accounts.');
+      vscode.commands.executeCommand('cursorUsage.refresh');
     }
-  }
-
-  private async openExtensionSettings(): Promise<void> {
-    await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:whyuds.coding-usage');
   }
 }
 
@@ -1288,7 +1478,7 @@ function registerCommands(context: vscode.ExtensionContext, provider: CodingUsag
       provider.refresh();
     }),
     vscode.commands.registerCommand('cursorUsage.updateSession', async () => {
-      await showUpdateSessionDialog();
+      await showUpdateSessionDialog(context);
     }),
     vscode.commands.registerCommand('cursorUsage.showOutput', () => {
       provider.showOutput();
@@ -1329,11 +1519,7 @@ function registerListeners(context: vscode.ExtensionContext, provider: CodingUsa
   context.subscriptions.push(windowStateListener);
 }
 
-async function showUpdateSessionDialog(): Promise<void> {
-  const defaultBrowser = await detectDefaultBrowser();
-  logWithTime(`更新Session时检测到默认浏览器: ${defaultBrowser}`);
-
-  const extensionUrl = getBrowserExtensionUrl(defaultBrowser);
+async function showUpdateSessionDialog(context: vscode.ExtensionContext): Promise<void> {
   const dashboardUrl = getDashboardUrl();
   const clientApiKey = getClientApiKey();
   const teamServerUrl = getTeamServerUrl();
@@ -1351,18 +1537,6 @@ async function showUpdateSessionDialog(): Promise<void> {
 
   const items: QuickPickItemExtended[] = [
     {
-      label: '$(cloud-download) Install Browser Extension',
-      description: 'Install Chrome/Edge extension to easily copy your session token',
-      detail: extensionUrl,
-      action: 'installExtension'
-    },
-    {
-      label: `$(globe) Visit ${APP_NAME} Dashboard`,
-      description: `Open ${APP_NAME} dashboard to auto-copy session token`,
-      detail: dashboardUrl,
-      action: 'visitDashboard'
-    },
-    {
       label: reportingEnabled ? '$(check) Team Reporting: ON' : '$(circle-slash) Team Reporting: OFF',
       description: reportingEnabled ? 'Click to disable' : 'Click to enable',
       detail: reportingDetail,
@@ -1377,8 +1551,14 @@ async function showUpdateSessionDialog(): Promise<void> {
     {
       label: '$(gear) Open Extension Settings',
       description: 'Open settings for this extension',
-      detail: 'Configure session token, team server URL, and reporting options',
+      detail: 'Configure additional accounts, team server URL, and reporting options',
       action: 'openSettings'
+    },
+    {
+      label: `$(globe) Visit ${APP_NAME} Dashboard`,
+      description: `Open ${APP_NAME} dashboard in browser`,
+      detail: dashboardUrl,
+      action: 'visitDashboard'
     }
   ];
 
@@ -1394,9 +1574,6 @@ async function showUpdateSessionDialog(): Promise<void> {
       case 'visitDashboard':
         vscode.env.openExternal(vscode.Uri.parse(dashboardUrl));
         break;
-      case 'installExtension':
-        vscode.env.openExternal(vscode.Uri.parse(extensionUrl));
-        break;
       case 'toggleReporting':
         // 切换上报开关
         const newReportingState = !reportingEnabled;
@@ -1408,7 +1585,7 @@ async function showUpdateSessionDialog(): Promise<void> {
       case 'copyKeyAndOpenServer':
         // 复制 API Key 并跳转到 team server
         if (!clientApiKey) {
-          vscode.window.showWarningMessage('API Key not generated yet. Please configure Session Token and refresh to generate API Key.');
+          vscode.window.showWarningMessage('API Key not generated yet. Please wait for primary account to be detected.');
           break;
         }
         await vscode.env.clipboard.writeText(clientApiKey);

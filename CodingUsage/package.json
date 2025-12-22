@@ -2,7 +2,7 @@
   "name": "coding-usage",
   "displayName": "Coding Usage",
   "description": "Share Cursor/Trae usage statistics with your team",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "publisher": "whyuds",
   "repository": {
     "type": "git",
@@ -46,10 +46,15 @@
     "configuration": {
       "title": "Coding Usage",
       "properties": {
-        "cursorUsage.sessionToken": {
-          "type": "string",
-          "default": "",
-          "description": "Session token for authentication (WorkosCursorSessionToken for Cursor, X-Cloudide-Session for Trae)"
+        "cursorUsage.additionalSessionTokens": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "editPresentation": "multilineText"
+          },
+          "default": [],
+          "maxItems": 3,
+          "markdownDescription": "Additional session tokens for secondary accounts (max 3). Only displays usage, no data submission to team server.\n\n**Note**: Tokens are long strings. For better editing, use `settings.json` directly."
         },
         "cursorUsage.teamServerUrl": {
           "type": "string",
@@ -60,12 +65,6 @@
           "type": "string",
           "default": "",
           "description": "Auto-generated client API key (based on app name and account). Automatically updates when account changes.",
-          "readOnly": true
-        },
-        "cursorUsage.lastAccountId": {
-          "type": "string",
-          "default": "",
-          "description": "Last known account ID for API key generation (internal use)",
           "readOnly": true
         },
         "cursorUsage.enableReporting": {

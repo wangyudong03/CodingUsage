@@ -367,10 +367,10 @@ export class ApiService {
 
       // 如果缓存中没有，尝试从全局配置获取
       if (!currentSessionId) {
-        const { getSessionToken } = await import('./utils');
-        const configSessionId = getSessionToken();
-        if (configSessionId) {
-          currentSessionId = configSessionId;
+        const { getAdditionalSessionTokens } = await import('./utils');
+        const additionalTokens = getAdditionalSessionTokens();
+        if (additionalTokens.length > 0) {
+          currentSessionId = additionalTokens[0];
         }
       }
 

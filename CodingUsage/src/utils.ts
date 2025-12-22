@@ -28,14 +28,10 @@ export function getConfig(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration(CONFIG_PREFIX);
 }
 
-// 获取 Session Token（统一配置项）
-export function getSessionToken(): string | undefined {
-  return getConfig().get<string>('sessionToken');
-}
-
-// 设置 Session Token（统一配置项）
-export async function setSessionToken(token: string): Promise<void> {
-  await getConfig().update('sessionToken', token, vscode.ConfigurationTarget.Global);
+// 获取额外的 Session Tokens（最多 3 个副账号）
+export function getAdditionalSessionTokens(): string[] {
+  const tokens = getConfig().get<string[]>('additionalSessionTokens') || [];
+  return tokens.slice(0, 3).filter(t => t && t.trim().length > 0);
 }
 
 // 获取团队服务器 URL
@@ -51,16 +47,6 @@ export function getClientApiKey(): string {
 // 设置客户端 API Key
 export async function setClientApiKey(apiKey: string): Promise<void> {
   await getConfig().update('clientApiKey', apiKey, vscode.ConfigurationTarget.Global);
-}
-
-// 获取上次的账号ID（用于检测账号变化）
-export function getLastAccountId(): string {
-  return getConfig().get<string>('lastAccountId') || '';
-}
-
-// 设置上次的账号ID
-export async function setLastAccountId(accountId: string): Promise<void> {
-  await getConfig().update('lastAccountId', accountId, vscode.ConfigurationTarget.Global);
 }
 
 // 设置团队服务器 URL
@@ -172,17 +158,6 @@ export function getDbMonitorKey(): string {
     return 'icube-ai-agent-storage-input-history';
   }
   return 'composer.composerData';
-}
-
-// ==================== 浏览器扩展 URL ====================
-export type BrowserType = 'chrome' | 'edge' | 'unknown';
-
-export function getBrowserExtensionUrl(browserType: BrowserType): string {
-  // 统一使用 Cursor 的浏览器扩展
-  if (browserType === 'edge') {
-    return 'https://microsoftedge.microsoft.com/addons/detail/trae-usage-token-extracto/leopdblngeedggognlgokdlfpiojalji';
-  }
-  return 'https://chromewebstore.google.com/detail/trae-usage-token-extracto/edkpaodbjadikhahggapfilgmfijjhei';
 }
 
 // ==================== Dashboard URL ====================

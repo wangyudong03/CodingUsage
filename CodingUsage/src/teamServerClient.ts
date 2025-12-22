@@ -9,9 +9,7 @@ import {
   getClientApiKey,
   setClientApiKey,
   setTeamServerUrl,
-  isReportingEnabled,
-  getLastAccountId,
-  setLastAccountId
+  isReportingEnabled
 } from './utils';
 import { UsageSummaryResponse, BillingCycleResponse, AggregatedUsageResponse, getApiService } from './apiService';
 
@@ -46,22 +44,20 @@ export class ApiKeyGenerator {
     return `ck_${hash}`;
   }
 
-  // 检查账号变化并更新 API Key
+  // 根据账号生成并更新 API Key
   static async checkAndUpdateApiKey(accountId: string): Promise<string> {
     if (!accountId) {
       logWithTime('账号ID为空，跳过 API Key 更新');
       return getClientApiKey();
     }
 
-    const lastAccountId = getLastAccountId();
     const currentApiKey = getClientApiKey();
     const expectedApiKey = this.generateApiKey(accountId);
 
-    // 如果账号变化或 API Key 不匹配，则更新
-    if (lastAccountId !== accountId || currentApiKey !== expectedApiKey) {
-      logWithTime(`账号变化 (${lastAccountId || '无'} -> ${accountId})，更新 API Key`);
+    // 如果 API Key 不匹配，则更新
+    if (currentApiKey !== expectedApiKey) {
+      logWithTime(`更新 API Key for ${accountId}`);
       await setClientApiKey(expectedApiKey);
-      await setLastAccountId(accountId);
       logWithTime(`API Key 已更新: ${expectedApiKey.substring(0, 11)}...`);
       return expectedApiKey;
     }
@@ -191,7 +187,7 @@ export class TeamServerClient {
         platform: os.platform(),
         app_name: vscode.env.appName
       };
-      // logWithTime(`提交使用数据: ${JSON.stringify(body)}`);
+      logWithTime(`提交使用数据: ${JSON.stringify(body)}`);
       await axios.post(`${url}/api/cursor-usage`, body, { headers: { 'X-Api-Key': apiKey }, timeout: API_TIMEOUT });
       logWithTime('提交使用数据成功');
     } catch (e) {
