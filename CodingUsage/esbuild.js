@@ -1,5 +1,17 @@
 const esbuild = require('esbuild');
 const { copy } = require('esbuild-plugin-copy');
+const fs = require('fs');
+const path = require('path');
+
+// 自动从根目录复制英文版 README 作为扩展的 README
+const sourceReadme = path.join(__dirname, '..', 'README_EN.md');
+const targetReadme = path.join(__dirname, 'README.md');
+if (fs.existsSync(sourceReadme)) {
+  fs.copyFileSync(sourceReadme, targetReadme);
+  console.log('✓ README copied from ../README_EN.md');
+} else {
+  console.warn('⚠ README_EN.md not found in parent directory');
+}
 
 //@ts-check
 /** @typedef {import('esbuild').BuildOptions} BuildOptions **/
