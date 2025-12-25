@@ -371,7 +371,7 @@ export class CursorProvider implements IUsageProvider {
             if (showAll) {
                 this.statusBarItem.text = `$(cursor-logo) ${Math.round(apiPercentUsed)}%`;
             } else {
-                this.statusBarItem.text = `⚡ ${membershipType}: $${apiUsageDollars.toFixed(2)}/${apiLimitDollars.toFixed(0)} (${apiPercentUsed.toFixed(1)}%)`;
+                this.statusBarItem.text = `$(cursor-logo) ${membershipType}: $${apiUsageDollars.toFixed(2)}/${apiLimitDollars.toFixed(0)} (${apiPercentUsed.toFixed(1)}%)`;
             }
         } else {
             const usedCents = plan.breakdown?.total ?? plan.used;
@@ -380,7 +380,7 @@ export class CursorProvider implements IUsageProvider {
             if (showAll) {
                 this.statusBarItem.text = `$(cursor-logo) ${Math.round(totalPercentUsed)}%`;
             } else {
-                this.statusBarItem.text = `⚡ ${membershipType}: $${usedDollars.toFixed(2)}/${limitDollars.toFixed(0)} (${totalPercentUsed.toFixed(1)}%)`;
+                this.statusBarItem.text = `$(cursor-logo) ${membershipType}: $${usedDollars.toFixed(2)}/${limitDollars.toFixed(0)} (${totalPercentUsed.toFixed(1)}%)`;
             }
         }
 

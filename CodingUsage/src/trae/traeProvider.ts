@@ -394,7 +394,7 @@ export class TraeProvider implements IUsageProvider {
         if (showAll) {
             this.statusBarItem.text = `$(trae-logo) ${Math.round(percentage)}%`;
         } else {
-            this.statusBarItem.text = `⚡ Fast: ${totalUsage}/${totalLimit} (${remainingFormatted} Left)`;
+            this.statusBarItem.text = `$(trae-logo) Fast: ${totalUsage}/${totalLimit} (${remainingFormatted} Left)`;
         }
         this.statusBarItem.color = undefined;
         this.statusBarItem.tooltip = this.buildTraeDetailedTooltip();
@@ -565,7 +565,7 @@ export class TraeProvider implements IUsageProvider {
                 case 2:
                     return 'Extra Package';
                 default:
-                    return 'Unknown';
+                    return 'Free';
             }
         }
 

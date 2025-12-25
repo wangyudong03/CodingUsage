@@ -36,7 +36,7 @@ After installation, the status bar will display usage for your currently logged-
 **Configuration Steps:**
 
 1. Install CodingUsage extension in each IDE
-2. Double-click the status bar and select **Show All**
+2. Double-click the status bar and select **Show All Providers**
 3. Restart the IDE
 
 Once configured, you can view usage statistics from all configured IDEs in any single IDE.

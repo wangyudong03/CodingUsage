@@ -36,7 +36,7 @@
 **配置步骤：**
 
 1. 在各个IDE中分别安装 CodingUsage 扩展
-2. 双击状态栏，选择 **Show All** 选项
+2. 双击状态栏，打开 **Show All Providers** 开关
 3. 重启IDE
 
 配置完成后，可在任意一个IDE中查看所有已配置IDE的使用量统计。

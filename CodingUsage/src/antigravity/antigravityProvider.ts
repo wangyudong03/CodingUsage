@@ -152,7 +152,7 @@ export class AntigravityProvider implements IUsageProvider {
                 return;
             }
             this.statusBarItem.show();
-            this.statusBarItem.text = '$(warning) Antigravity: Off';
+            this.statusBarItem.text = '$(warning) $(antigravity-logo) Off';
             this.statusBarItem.tooltip = 'Antigravity 数据不可用\n点击刷新';
             return;
         }
@@ -167,9 +167,11 @@ export class AntigravityProvider implements IUsageProvider {
         if (gPro) displayItems.push({ name: 'Gemini Pro', model: gPro });
         if (gFlash) displayItems.push({ name: 'Gemini Flash', model: gFlash });
 
-        // Filter out models at 0% usage (100% remaining)
+        // Filter out models at 0% usage (100% remaining) and exclude Gemini Flash from status bar display
         const rotationItems = displayItems.filter(item =>
-            item.model.remainingPercentage !== undefined && item.model.remainingPercentage < 100
+            item.model.remainingPercentage !== undefined &&
+            item.model.remainingPercentage < 100 &&
+            item.name !== 'Gemini Flash'
         );
 
         // Antigravity icon: $(antigravity-logo)
@@ -179,7 +181,7 @@ export class AntigravityProvider implements IUsageProvider {
             if (showAll) {
                 this.statusBarItem.text = `${agIcon} 0%`;
             } else {
-                this.statusBarItem.text = 'Antigravity: 0%';
+                this.statusBarItem.text = '$(antigravity-logo) 0%';
             }
         } else {
             // Sort by timeUntilReset ascending (closest to reset first)
@@ -188,7 +190,7 @@ export class AntigravityProvider implements IUsageProvider {
             if (showAll) {
                 this.statusBarItem.text = `${agIcon} ${this.formatUsage(current.model)}`;
             } else {
-                this.statusBarItem.text = `Antigravity: ${this.formatUsage(current.model)} (${current.model.timeUntilResetFormatted})`;
+                this.statusBarItem.text = `$(antigravity-logo) ${current.name} ${this.formatUsage(current.model)} (${current.model.timeUntilResetFormatted})`;
             }
         }
         this.statusBarItem.tooltip = this.buildTooltip();
