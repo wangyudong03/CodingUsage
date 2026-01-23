@@ -12,7 +12,7 @@ import {
     getAdditionalSessionTokens,
     getConfig
 } from './utils';
-import { APP_NAME } from './constants';
+import { APP_NAME, PROMPT_CACHE_DURATION_MS, PROMPT_CACHE_UPDATE_INTERVAL_MS, DB_MONITOR_INTERVAL_MS } from './constants';
 
 // ==================== 数据库监控 ====================
 export class DbMonitor {
@@ -141,7 +141,7 @@ export class DbMonitor {
     public async start(): Promise<void> {
         const dbPath = await this.getStateDbPathForCurrentWorkspace();
         if (dbPath) await this.tick();
-        this.interval = setInterval(() => this.tick(), 10000);
+        this.interval = setInterval(() => this.tick(), DB_MONITOR_INTERVAL_MS);
     }
 
     public stop(): void {
@@ -214,6 +214,127 @@ export class ClipboardMonitor {
             vscode.window.showInformationMessage('Session token added to additional accounts.');
             vscode.commands.executeCommand('cursorUsage.refresh');
         }
+    }
+}
+
+// ==================== PromptCache 倒计时器 ====================
+export class PromptCacheTimer {
+    private statusBarItem: vscode.StatusBarItem;
+    private updateInterval: NodeJS.Timeout | null = null;
+    private endTime: number = 0;
+    private isRunning: boolean = false;
+
+    constructor() {
+        // 创建状态栏项，优先级设为较高以便显示在较右侧
+        this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 1000);
+        this.statusBarItem.command = 'cursorUsage.resetPromptCacheTimer';
+        this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    }
+
+    /**
+     * 启动倒计时器
+     */
+    public start(): void {
+        // 如果已经在运行，先停止
+        if (this.isRunning) {
+            this.stop();
+        }
+
+        this.isRunning = true;
+        this.endTime = Date.now() + PROMPT_CACHE_DURATION_MS;
+        
+        // 立即更新显示
+        this.updateDisplay();
+        
+        // 启动定时器每秒更新
+        this.updateInterval = setInterval(() => {
+            this.updateDisplay();
+        }, PROMPT_CACHE_UPDATE_INTERVAL_MS);
+
+        this.statusBarItem.show();
+        logWithTime('[PromptCacheTimer] 倒计时开始，5分钟后过期');
+    }
+
+    /**
+     * 重置倒计时器（重新开始5分钟）
+     */
+    public reset(): void {
+        this.start();
+        logWithTime('[PromptCacheTimer] 倒计时已重置');
+    }
+
+    /**
+     * 停止倒计时器
+     */
+    public stop(): void {
+        if (this.updateInterval) {
+            clearInterval(this.updateInterval);
+            this.updateInterval = null;
+        }
+        this.isRunning = false;
+        this.statusBarItem.hide();
+        logWithTime('[PromptCacheTimer] 倒计时已停止');
+    }
+
+    /**
+     * 更新状态栏显示
+     */
+    private updateDisplay(): void {
+        const remainingMs = this.endTime - Date.now();
+
+        if (remainingMs <= 0) {
+            // 倒计时结束，隐藏状态栏
+            this.stop();
+            return;
+        }
+
+        const totalSeconds = Math.ceil(remainingMs / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        // 格式化显示 MM:SS
+        const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        // 根据剩余时间设置不同颜色提示
+        let icon = '$(clock)';
+        if (totalSeconds <= 60) {
+            // 最后1分钟，使用警告图标
+            icon = '$(warning)';
+            this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+        } else if (totalSeconds <= 120) {
+            // 最后2分钟，使用提示颜色
+            this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+        } else {
+            this.statusBarItem.backgroundColor = undefined;
+        }
+
+        this.statusBarItem.text = `${icon} Cache ${timeStr}`;
+        this.statusBarItem.tooltip = `PromptCache 剩余时间: ${timeStr}\n\n点击重置倒计时\n缓存将在 ${minutes} 分 ${seconds} 秒后过期`;
+    }
+
+    /**
+     * 检查倒计时器是否正在运行
+     */
+    public isTimerRunning(): boolean {
+        return this.isRunning;
+    }
+
+    /**
+     * 获取剩余时间（毫秒）
+     */
+    public getRemainingTime(): number {
+        if (!this.isRunning) {
+            return 0;
+        }
+        return Math.max(0, this.endTime - Date.now());
+    }
+
+    /**
+     * 释放资源
+     */
+    public dispose(): void {
+        this.stop();
+        this.statusBarItem.dispose();
     }
 }
 

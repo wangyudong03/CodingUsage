@@ -14,7 +14,7 @@ import { IUsageProvider } from './common/types';
 import { CursorProvider } from './cursor/cursorProvider';
 import { TraeProvider } from './trae/traeProvider';
 import { AntigravityProvider } from './antigravity/antigravityProvider';
-import { DbMonitor, ClipboardMonitor } from './common/monitors';
+import { DbMonitor, ClipboardMonitor, PromptCacheTimer } from './common/monitors';
 import { ServerDiscovery, TeamServerClient, PingManager } from './teamServerClient';
 
 declare const EXTENSION_TARGET: string;
@@ -86,7 +86,13 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   const clipboardMonitor = new ClipboardMonitor();
-  const dbMonitor = new DbMonitor(context, () => providers.forEach(p => p.safeRefresh()));
+  const promptCacheTimer = new PromptCacheTimer();
+  const dbMonitor = new DbMonitor(context, () => {
+    // 刷新用量数据
+    providers.forEach(p => p.safeRefresh());
+    // 检测到对话变化时，自动启动/重置 PromptCache 倒计时
+    promptCacheTimer.start();
+  });
   const pingManager = new PingManager();
 
   // 启动数据库监控（每10秒检查变化）
@@ -98,13 +104,14 @@ export async function activate(context: vscode.ExtensionContext) {
   pingManager.start();
   TeamServerClient.ping(true);
 
-  registerCommands(context, providers, cursorProvider, traeProvider, antigravityProvider);
+  registerCommands(context, providers, cursorProvider, traeProvider, antigravityProvider, promptCacheTimer);
   registerListeners(context, providers, clipboardMonitor);
 
   context.subscriptions.push({
     dispose: () => {
       dbMonitor.stop();
       pingManager.stop();
+      promptCacheTimer.dispose();
       providers.forEach(p => p.dispose());
     }
   });
@@ -115,7 +122,8 @@ function registerCommands(
   providers: IUsageProvider[],
   cursorProvider: CursorProvider | null,
   traeProvider: TraeProvider | null,
-  antigravityProvider: AntigravityProvider | null
+  antigravityProvider: AntigravityProvider | null,
+  promptCacheTimer: PromptCacheTimer
 ): void {
   const commands = [
     // 为每个 Provider 注册独立的点击命令
@@ -158,6 +166,16 @@ function registerCommands(
     }),
     vscode.commands.registerCommand('cursorUsage.exportLogs', async () => {
       await exportSessionLogs();
+    }),
+    // PromptCache 倒计时器命令
+    vscode.commands.registerCommand('cursorUsage.startPromptCacheTimer', () => {
+      promptCacheTimer.start();
+    }),
+    vscode.commands.registerCommand('cursorUsage.resetPromptCacheTimer', () => {
+      promptCacheTimer.reset();
+    }),
+    vscode.commands.registerCommand('cursorUsage.stopPromptCacheTimer', () => {
+      promptCacheTimer.stop();
     })
   ];
 
