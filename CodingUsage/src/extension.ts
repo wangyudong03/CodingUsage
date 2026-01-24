@@ -7,6 +7,7 @@ import {
   getTeamServerUrl,
   getConfig,
   isShowAllProvidersEnabled,
+  isPromptCacheTimerEnabled,
   exportSessionLogs
 } from './common/utils';
 import { APP_NAME } from './common/constants';
@@ -87,12 +88,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
   const clipboardMonitor = new ClipboardMonitor();
   const promptCacheTimer = new PromptCacheTimer();
-  const dbMonitor = new DbMonitor(context, () => {
-    // 刷新用量数据
-    providers.forEach(p => p.safeRefresh());
-    // 检测到对话变化时，自动启动/重置 PromptCache 倒计时
-    promptCacheTimer.start();
-  });
+  const dbMonitor = new DbMonitor(
+    context, 
+    () => {
+      // 刷新用量数据
+      providers.forEach(p => p.safeRefresh());
+    },
+    (lastUpdateTimeMs: number) => {
+      // 检测到对话变化时，根据最后更新时间启动倒计时
+      promptCacheTimer.startWithLastUpdateTime(lastUpdateTimeMs);
+    }
+  );
   const pingManager = new PingManager();
 
   // 启动数据库监控（每10秒检查变化）
@@ -104,7 +110,7 @@ export async function activate(context: vscode.ExtensionContext) {
   pingManager.start();
   TeamServerClient.ping(true);
 
-  registerCommands(context, providers, cursorProvider, traeProvider, antigravityProvider, promptCacheTimer);
+  registerCommands(context, providers, cursorProvider, traeProvider, antigravityProvider);
   registerListeners(context, providers, clipboardMonitor);
 
   context.subscriptions.push({
@@ -122,8 +128,7 @@ function registerCommands(
   providers: IUsageProvider[],
   cursorProvider: CursorProvider | null,
   traeProvider: TraeProvider | null,
-  antigravityProvider: AntigravityProvider | null,
-  promptCacheTimer: PromptCacheTimer
+  antigravityProvider: AntigravityProvider | null
 ): void {
   const commands = [
     // 为每个 Provider 注册独立的点击命令
@@ -166,16 +171,6 @@ function registerCommands(
     }),
     vscode.commands.registerCommand('cursorUsage.exportLogs', async () => {
       await exportSessionLogs();
-    }),
-    // PromptCache 倒计时器命令
-    vscode.commands.registerCommand('cursorUsage.startPromptCacheTimer', () => {
-      promptCacheTimer.start();
-    }),
-    vscode.commands.registerCommand('cursorUsage.resetPromptCacheTimer', () => {
-      promptCacheTimer.reset();
-    }),
-    vscode.commands.registerCommand('cursorUsage.stopPromptCacheTimer', () => {
-      promptCacheTimer.stop();
     })
   ];
 
@@ -201,6 +196,7 @@ function registerListeners(context: vscode.ExtensionContext, providers: IUsagePr
 async function showUpdateSessionDialog(context: vscode.ExtensionContext): Promise<void> {
   const dashboardUrl = getDashboardUrl();
   const showAllProviders = isShowAllProvidersEnabled();
+  const showPromptCacheTimer = isPromptCacheTimerEnabled();
 
   interface QuickPickItemExtended extends vscode.QuickPickItem {
     action: string;
@@ -212,6 +208,12 @@ async function showUpdateSessionDialog(context: vscode.ExtensionContext): Promis
       description: showAllProviders ? 'Click to show only current IDE' : 'Click to show usage for all IDEs',
       detail: 'View usage for Cursor, Trae, and Antigravity regardless of context',
       action: 'toggleShowAll'
+    },
+    {
+      label: showPromptCacheTimer ? '$(check) PromptCache Timer: ON' : '$(circle-slash) PromptCache Timer: OFF',
+      description: showPromptCacheTimer ? 'Click to hide cache timer' : 'Click to show cache timer',
+      detail: 'Display 5-minute countdown timer after each conversation',
+      action: 'togglePromptCacheTimer'
     },
     {
       label: '$(gear) Open Extension Settings',
@@ -260,6 +262,13 @@ async function showUpdateSessionDialog(context: vscode.ExtensionContext): Promis
         if (msg === 'Reload') {
           vscode.commands.executeCommand('workbench.action.reloadWindow');
         }
+        break;
+      case 'togglePromptCacheTimer':
+        // 切换 PromptCache 计时器显示
+        const newTimerState = !showPromptCacheTimer;
+        const timerConfig = getConfig();
+        await timerConfig.update('showPromptCacheTimer', newTimerState, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage(`PromptCache Timer ${newTimerState ? 'enabled' : 'disabled'}`);
         break;
       case 'openSettings':
         vscode.commands.executeCommand('workbench.action.openSettings', '@ext:whyuds.coding-usage');

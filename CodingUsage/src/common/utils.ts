@@ -170,6 +170,11 @@ export function getRecentEventsLimit(): number {
     return getConfig().get<number>('recentEventsLimit') ?? 5;
 }
 
+// 检查是否启用 PromptCache 倒计时器
+export function isPromptCacheTimerEnabled(): boolean {
+    return getConfig().get<boolean>('showPromptCacheTimer') ?? true;
+}
+
 // ==================== 输出通道管理 ====================
 let outputChannel: vscode.OutputChannel;
 

@@ -2,7 +2,7 @@
   "name": "coding-usage",
   "displayName": "Coding Usage",
   "description": "Share Cursor/Trae usage statistics with your team",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "publisher": "whyuds",
   "repository": {
     "type": "git",
@@ -111,6 +111,11 @@
           "minimum": 0,
           "maximum": 60,
           "description": "Maximum number of recent events to display in tooltip (0 to disable)"
+        },
+        "cursorUsage.showPromptCacheTimer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show PromptCache countdown timer in status bar"
         }
       }
     }

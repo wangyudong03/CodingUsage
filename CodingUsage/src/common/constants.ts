@@ -15,7 +15,8 @@ export const PROMPT_CACHE_DURATION_MS = 5 * 60 * 1000; // 5分钟 = 300000毫秒
 export const PROMPT_CACHE_UPDATE_INTERVAL_MS = 1000; // 每秒更新显示
 
 // Database Monitor Constants
-export const DB_MONITOR_INTERVAL_MS = 3000; // 数据库监控间隔，3秒更灵敏
+export const DB_MONITOR_BACKUP_INTERVAL_MS = 30000; // 备份轮询间隔，30秒（主要依赖文件系统监控）
+export const DB_WATCHER_DEBOUNCE_MS = 500; // 文件变化事件防抖间隔
 
 
 
