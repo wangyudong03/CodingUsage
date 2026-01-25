@@ -404,7 +404,7 @@ export class PromptCacheTimer {
 
     constructor() {
         // 创建状态栏项，放在左边跟使用量放在一起（优先级略低于使用量的100，显示在使用量右边）
-        this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
+        this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 80);
         this.statusBarItem.command = 'cursorUsage.handleCacheTimerClick';
         // 默认使用绿色背景
         this.statusBarItem.backgroundColor = new vscode.ThemeColor('testing.iconPassed');
@@ -578,7 +578,6 @@ export class PromptCacheTimer {
         this.statusBarItem.dispose();
     }
 }
-
 
 
 

@@ -197,6 +197,7 @@ async function showUpdateSessionDialog(context: vscode.ExtensionContext): Promis
   const dashboardUrl = getDashboardUrl();
   const showAllProviders = isShowAllProvidersEnabled();
   const showPromptCacheTimer = isPromptCacheTimerEnabled();
+  const appType = getAppType();
 
   interface QuickPickItemExtended extends vscode.QuickPickItem {
     action: string;
@@ -209,12 +210,12 @@ async function showUpdateSessionDialog(context: vscode.ExtensionContext): Promis
       detail: 'View usage for Cursor, Trae, and Antigravity regardless of context',
       action: 'toggleShowAll'
     },
-    {
+    ...(appType === 'cursor' ? [{
       label: showPromptCacheTimer ? '$(check) PromptCache Timer: ON' : '$(circle-slash) PromptCache Timer: OFF',
       description: showPromptCacheTimer ? 'Click to hide cache timer' : 'Click to show cache timer',
       detail: 'Display 5-minute countdown timer after each conversation',
       action: 'togglePromptCacheTimer'
-    },
+    }] : []),
     {
       label: '$(gear) Open Extension Settings',
       description: 'Open settings for this extension',

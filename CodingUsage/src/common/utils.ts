@@ -172,6 +172,9 @@ export function getRecentEventsLimit(): number {
 
 // 检查是否启用 PromptCache 倒计时器
 export function isPromptCacheTimerEnabled(): boolean {
+    if (getAppType() !== 'cursor') {
+        return false;
+    }
     return getConfig().get<boolean>('showPromptCacheTimer') ?? true;
 }
 
@@ -431,7 +434,6 @@ export function getDashboardUrl(): string {
     }
     return 'https://cursor.com/dashboard?tab=usage';
 }
-
 
 
 
